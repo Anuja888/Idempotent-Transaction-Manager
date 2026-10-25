@@ -1,8 +1,7 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ],
   "env": {
     "VERCEL": "1"
-  }
+  },
+  "buildCommand": "pip install -r requirements.txt",
+  "excludeFiles": "venv/**,tests/**,*.txt,.git/**,__pycache__/**,*.pyc,docker-compose*,Dockerfile"
 }

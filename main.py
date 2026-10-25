@@ -163,8 +163,16 @@ async def _do_charge(
 # ── Account endpoints ─────────────────────────────────────────────────────────
 @app.get("/healthz", tags=["ops"])
 async def health():
-    """Liveness check — also pinged by the test harness."""
-    return {"status": "ok"}
+    """Liveness check — returns DB connectivity status."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+        return {"status": "ok", "db": "connected"}
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": "disconnected", "error": str(exc)},
+        )
 
 
 @app.post("/accounts", tags=["accounts"])
@@ -512,6 +520,39 @@ async def run_test_2():
             "all_50_succeeded": success_count == 50,
             "all_50_records": tx_count == 50,
         },
+    }
+
+
+# ── Debug endpoint (safe — no credentials exposed) ────────────────────────────
+@app.get("/debug", tags=["ops"])
+async def debug_connection():
+    """
+    Returns DB connectivity status and sanitised config.
+    Useful for diagnosing Vercel / Neon connection issues.
+    """
+    from database import DATABASE_URL, _IS_SERVERLESS, _connect_args
+    # Sanitise URL — hide password
+    import re
+    safe_url = re.sub(r":([^@]+)@", ":***@", DATABASE_URL)
+
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(__import__("sqlalchemy").text("SELECT version()"))
+            pg_version = result.scalar()
+        db_ok = True
+        db_error = None
+    except Exception as exc:
+        db_ok = False
+        pg_version = None
+        db_error = str(exc)
+
+    return {
+        "db_ok": db_ok,
+        "db_url": safe_url,
+        "is_serverless": _IS_SERVERLESS,
+        "connect_args_keys": list(_connect_args.keys()),
+        "pg_version": pg_version,
+        "db_error": db_error,
     }
 
 

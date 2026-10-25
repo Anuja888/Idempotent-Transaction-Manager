@@ -13,9 +13,21 @@ __pycache__/
 
 # Local test output
 test_results.txt
+pytest_*.txt
+test_concurrency_out.txt
+test_run_output.txt
+.pytest_cache/
 
 # Machine-specific docker-compose override (local port mappings)
 docker-compose.override.yml
+
+# Environment secrets
+.env
+
+# Python egg
+*.egg-info/
+dist/
+build/
 
 # OS
 .DS_Store

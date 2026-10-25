@@ -6,7 +6,7 @@ import subprocess
 import time
 from decimal import Decimal
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
 
 async def check_server_ready():
     """Wait for the FastAPI server to be responsive."""
@@ -189,11 +189,18 @@ async def main():
         sys.executable, "-m", "uvicorn", 
         "main:app", 
         "--host", "127.0.0.1", 
-        "--port", "8000", 
+        "--port", "8001", 
         "--log-level", "warning"
     ]
+    # Pass DATABASE_URL so the spawned server can reach PostgreSQL
+    import os
+    env = os.environ.copy()
+    if "DATABASE_URL" not in env:
+        env["DATABASE_URL"] = (
+            "postgresql+asyncpg://postgres:password@localhost:5433/transaction_processor"
+        )
     print("Starting FastAPI server...")
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     
     try:
         # Wait for the server to be ready

@@ -1,811 +1,906 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Idempotent Transaction Processor Dashboard</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: rgba(17, 24, 39, 0.7);
-            --card-border: rgba(255, 255, 255, 0.08);
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.15);
-            --accent-cyan: #06b6d4;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --accent-green-glow: rgba(16, 185, 129, 0.1);
-            --accent-red-glow: rgba(239, 68, 68, 0.1);
-            --font-display: 'Space Grotesk', sans-serif;
-            --font-sans: 'Outfit', sans-serif;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IdempotentTX — Transaction Operations Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:          #0f1012;
+      --surface:     #16181c;
+      --surface2:    #1c1f24;
+      --surface3:    #22252c;
+      --border:      #2a2d35;
+      --border2:     #353841;
+      --text:        #e6e8ef;
+      --text2:       #9096a8;
+      --text3:       #5c6174;
+      --brand:       #c8a96a;
+      --brand-dim:   rgba(200,169,106,.14);
+      --brand-glow:  rgba(200,169,106,.07);
+      --success:     #3ecf8e;
+      --success-bg:  rgba(62,207,142,.1);
+      --warn:        #f5a623;
+      --warn-bg:     rgba(245,166,35,.1);
+      --danger:      #e05454;
+      --danger-bg:   rgba(224,84,84,.1);
+      --info:        #5b9ef4;
+      --info-bg:     rgba(91,158,244,.1);
+      --r:           6px;
+      --r2:          10px;
+      --shadow:      0 2px 20px rgba(0,0,0,.55);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; line-height: 1.5; min-height: 100vh; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+    /* ── Shell ── */
+    .shell { display: grid; grid-template-columns: 210px 1fr; grid-template-rows: 50px 1fr; min-height: 100vh; }
 
-        body {
-            background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(at 10% 10%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
-                radial-gradient(at 90% 90%, rgba(6, 182, 212, 0.08) 0px, transparent 50%),
-                radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.8) 0px, transparent 100%);
-            background-attachment: fixed;
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            min-height: 100vh;
-            padding: 2rem;
-            line-height: 1.5;
-        }
+    /* ── Topbar ── */
+    .topbar {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 18px; gap: 14px;
+    }
+    .logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: .95rem; color: var(--text); }
+    .logo-icon { width: 26px; height: 26px; border-radius: 5px; background: var(--brand); display: grid; place-items: center; font-size: .7rem; font-weight: 800; color: #111; flex-shrink: 0; }
+    .topbar-sep { color: var(--border2); }
+    .topbar-sub { color: var(--text3); font-size: .75rem; }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .clock { font-family: 'JetBrains Mono', monospace; font-size: .73rem; color: var(--text3); }
+    .health-pill {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 99px; font-size: .72rem; font-weight: 500;
+      background: var(--success-bg); border: 1px solid rgba(62,207,142,.2); color: var(--success);
+      transition: all .3s;
+    }
+    .health-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: blink 2.4s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+    /* ── Sidebar ── */
+    .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 12px 0; overflow-y: auto; }
+    .nav-section { padding: 0 10px; margin-bottom: 4px; }
+    .nav-label { font-size: .63rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); padding: 8px 8px 3px; }
+    .nav-btn {
+      display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: var(--r);
+      color: var(--text2); font-size: .83rem; font-weight: 450; width: 100%;
+      background: none; border: none; cursor: pointer; text-align: left; transition: background .12s, color .12s;
+    }
+    .nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .nav-btn.active { background: var(--brand-dim); color: var(--brand); }
+    .nav-btn svg { flex-shrink: 0; opacity: .65; }
+    .nav-btn.active svg { opacity: 1; }
 
-        /* Header Style */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2.5rem;
-            padding-bottom: 1.5rem;
-            border-bottom: 1px solid var(--card-border);
-        }
+    /* ── Main ── */
+    .main { overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+    .page { display: none; flex-direction: column; gap: 18px; }
+    .page.active { display: flex; }
 
-        .logo-section h1 {
-            font-family: var(--font-display);
-            font-size: 2.25rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #22d3ee 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.03em;
-        }
+    /* ── Page header ── */
+    .ph { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    .ph-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .ph-sub { color: var(--text2); font-size: .82rem; margin-top: 2px; }
 
-        .logo-section p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            margin-top: 0.25rem;
-        }
+    /* ── Stat cards ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 14px 16px; }
+    .stat-lbl { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text3); margin-bottom: 5px; }
+    .stat-val { font-size: 1.55rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+    .stat-val.brand { color: var(--brand); }
+    .stat-val.success { color: var(--success); }
+    .stat-val.danger { color: var(--danger); }
+    .stat-sub { font-size: .72rem; color: var(--text3); margin-top: 3px; }
 
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 9999px;
-            color: var(--accent-green);
-            font-weight: 500;
-            font-size: 0.875rem;
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.08);
-        }
+    /* ── Card ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .card-title { font-size: .87rem; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+    .card-body { padding: 16px; }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background-color: var(--accent-green);
-            border-radius: 50%;
-            display: inline-block;
-            animation: pulse 2s infinite;
-        }
+    /* ── Table ── */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .81rem; }
+    th { text-align: left; padding: 8px 11px; color: var(--text3); font-size: .67rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface2); }
+    td { padding: 8px 11px; border-bottom: 1px solid var(--border); vertical-align: middle; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface2); }
 
-        @keyframes pulse {
-            0% { transform: scale(0.9); opacity: 0.6; }
-            50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px var(--accent-green); }
-            100% { transform: scale(0.9); opacity: 0.6; }
-        }
+    /* ── Badges ── */
+    .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+    .b-ok   { background: var(--success-bg); color: var(--success); border: 1px solid rgba(62,207,142,.2); }
+    .b-warn { background: var(--warn-bg);    color: var(--warn);    border: 1px solid rgba(245,166,35,.2); }
+    .b-err  { background: var(--danger-bg);  color: var(--danger);  border: 1px solid rgba(224,84,84,.2); }
+    .b-info { background: var(--info-bg);    color: var(--info);    border: 1px solid rgba(91,158,244,.2); }
+    .b-muted{ background: var(--surface3);   color: var(--text2);   border: 1px solid var(--border); }
 
-        /* Layout Grid */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 13px; border-radius: var(--r); font-size: .81rem; font-weight: 500; border: none; cursor: pointer; font-family: inherit; transition: opacity .15s, transform .1s; }
+    .btn:hover:not(:disabled) { opacity: .82; }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .btn-primary   { background: var(--brand); color: #111; font-weight: 600; }
+    .btn-secondary { background: var(--surface3); color: var(--text); border: 1px solid var(--border2); }
+    .btn-ghost     { background: transparent; color: var(--text2); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); opacity: 1; }
+    .btn-sm  { padding: 4px 9px; font-size: .76rem; }
+    .btn-full{ width: 100%; justify-content: center; }
 
-        @media (max-width: 1024px) {
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-        }
+    /* ── Forms ── */
+    .fg { display: flex; flex-direction: column; gap: 4px; }
+    .flbl { font-size: .73rem; font-weight: 500; color: var(--text2); }
+    .finput, .fsel {
+      background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--r);
+      color: var(--text); padding: 7px 11px; font-size: .83rem; width: 100%;
+      font-family: inherit; transition: border-color .15s;
+    }
+    .finput:focus, .fsel:focus { outline: none; border-color: var(--brand); }
+    .finput::placeholder { color: var(--text3); }
+    .irow { display: flex; gap: 7px; }
+    .irow .finput { flex: 1; }
+    .fgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-        /* Frosted Glass Cards */
-        .card {
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 2rem;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            transition: transform 0.3s ease, border-color 0.3s ease;
-        }
+    /* ── Toast ── */
+    #toasts { position: fixed; top: 60px; right: 14px; display: flex; flex-direction: column; gap: 7px; z-index: 1000; pointer-events: none; }
+    .toast { background: var(--surface3); border: 1px solid var(--border2); border-radius: var(--r2); padding: 10px 14px; max-width: 300px; font-size: .8rem; pointer-events: all; box-shadow: var(--shadow); animation: tIn .2s ease; }
+    .toast.ok  { border-left: 3px solid var(--success); }
+    .toast.err { border-left: 3px solid var(--danger); }
+    .toast.inf { border-left: 3px solid var(--info); }
+    @keyframes tIn { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
 
-        .card:hover {
-            border-color: rgba(99, 102, 241, 0.25);
-        }
+    /* ── Skeleton ── */
+    .skel { background: linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; height: 13px; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .empty { text-align: center; padding: 32px 16px; color: var(--text3); font-size: .83rem; }
 
-        .card-title {
-            font-family: var(--font-display);
-            font-size: 1.35rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            padding-bottom: 0.75rem;
-        }
+    /* ── Account rows ── */
+    .acc-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+    .acc-row:last-child { border-bottom: none; }
+    .acc-row:hover { background: var(--surface2); }
+    .acc-id { font-family: 'JetBrains Mono', monospace; font-size: .77rem; color: var(--info); }
+    .acc-bal { font-weight: 600; }
 
-        /* Form Fields & Buttons */
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
+    /* ── 2-col layout ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media(max-width:860px){ .two-col{ grid-template-columns:1fr; } }
 
-        label {
-            display: block;
-            color: var(--text-muted);
-            font-size: 0.875rem;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
+    /* ── Test boxes ── */
+    .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media(max-width:700px){ .test-grid{ grid-template-columns:1fr; } }
+    .tbox { border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; }
+    .tbox-head { padding: 13px 15px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+    .tbox-title { font-weight: 600; font-size: .88rem; margin-bottom: 3px; }
+    .tbox-desc { font-size: .76rem; color: var(--text2); line-height: 1.5; }
+    .tbox-body { padding: 13px 15px; display: flex; flex-direction: column; gap: 11px; }
+    .res-row { display: flex; justify-content: space-between; align-items: center; font-size: .78rem; }
+    .res-lbl { color: var(--text2); }
+    .res-val { font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: .76rem; }
+    .res-val.pass { color: var(--success); }
+    .res-val.fail { color: var(--danger); }
+    .prog-bar { height: 3px; background: var(--surface3); border-radius: 2px; overflow: hidden; display: none; }
+    .prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg,var(--brand),var(--success)); transition: width .3s; }
+    .result-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 11px; display: none; }
+    .pass-banner { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: .85rem; margin-bottom: 9px; }
 
-        input {
-            width: 100%;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid var(--card-border);
-            border-radius: 8px;
-            padding: 0.75rem 1rem;
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            font-size: 0.95rem;
-            transition: all 0.2s ease;
-        }
+    /* ── Viz ── */
+    .req-stream { display: flex; flex-wrap: wrap; gap: 4px; min-height: 56px; align-content: flex-start; margin-bottom: 14px; }
+    .rdot { width: 9px; height: 9px; border-radius: 50%; background: rgba(91,158,244,.15); border: 1px solid rgba(91,158,244,.35); transition: background .25s, border-color .25s; }
+    .rdot.win  { background: var(--success-bg); border-color: rgba(62,207,142,.6); }
+    .rdot.dup  { background: var(--brand-dim);  border-color: rgba(200,169,106,.5); }
+    .rdot.fail { background: var(--danger-bg);  border-color: rgba(224,84,84,.4); }
+    .viz-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 12px; }
+    .vs { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 11px; text-align: center; }
+    .vs-val { font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .vs-lbl { font-size: .65rem; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
 
-        input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-            background: rgba(15, 23, 42, 0.8);
-        }
+    /* ── Drawer ── */
+    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; display: none; backdrop-filter: blur(2px); }
+    #drawer  { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px,100vw); background: var(--surface); border-left: 1px solid var(--border); z-index: 201; overflow-y: auto; padding: 22px; transform: translateX(100%); transition: transform .22s ease; }
+    #drawer.open { transform: translateX(0); }
+    .dr-close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text2); font-size: 1.1rem; cursor: pointer; }
+    .dr-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; padding-right: 28px; }
+    .dr-sec { margin-bottom: 13px; }
+    .dr-lbl { font-size: .64rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); margin-bottom: 4px; }
+    .dr-val { font-size: .83rem; word-break: break-all; }
+    .dr-val.mono { font-family: 'JetBrains Mono', monospace; font-size: .76rem; }
+    .json-block { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 11px; font-family: 'JetBrains Mono', monospace; font-size: .76rem; white-space: pre-wrap; word-break: break-all; color: var(--success); max-height: 190px; overflow-y: auto; }
 
-        .btn-group-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 0.5rem;
-        }
+    /* ── Filter bar ── */
+    .fbar { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .fbar .finput, .fbar .fsel { width: auto; min-width: 110px; padding: 5px 9px; font-size: .78rem; }
+    .fbar .finput.wide { min-width: 190px; }
 
-        button {
-            cursor: pointer;
-            font-family: var(--font-sans);
-            font-weight: 600;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            border: none;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            font-size: 0.95rem;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
-            color: white;
-            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--text-main);
-            border: 1px solid var(--card-border);
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        .btn-accent {
-            background: linear-gradient(135deg, var(--accent-cyan) 0%, #0891b2 100%);
-            color: white;
-            box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4);
-        }
-
-        .btn-accent:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.6);
-        }
-
-        /* Account Table & Lists */
-        .list-container {
-            max-height: 220px;
-            overflow-y: auto;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            background: rgba(15, 23, 42, 0.3);
-        }
-
-        .list-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .list-item:last-child {
-            border-bottom: none;
-        }
-
-        .account-id-tag {
-            font-family: monospace;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: var(--accent-cyan);
-        }
-
-        .balance-tag {
-            font-weight: 700;
-            color: var(--accent-green);
-        }
-
-        /* Test Suite Styles */
-        .test-suites {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-        }
-
-        @media (max-width: 640px) {
-            .test-suites {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .test-box {
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .test-box h3 {
-            font-family: var(--font-display);
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .test-box p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            margin-bottom: 1.25rem;
-            min-height: 48px;
-        }
-
-        /* Test Result Metrics Display */
-        .test-metric-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .test-metric-row span:last-child {
-            font-weight: 600;
-        }
-
-        .metric-pass { color: var(--accent-green); }
-        .metric-fail { color: var(--accent-red); }
-
-        .progress-bar-container {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 9999px;
-            overflow: hidden;
-            margin-top: 1rem;
-            display: none;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--primary), var(--accent-cyan));
-            transition: width 0.3s ease;
-        }
-
-        /* Monitor / Table Styles */
-        .monitor-card {
-            margin-top: 2rem;
-        }
-
-        .table-responsive {
-            overflow-x: auto;
-            max-height: 350px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            background: rgba(15, 23, 42, 0.3);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            font-size: 0.9rem;
-        }
-
-        th {
-            background: rgba(15, 23, 42, 0.7);
-            padding: 1rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            font-family: var(--font-display);
-        }
-
-        td {
-            padding: 0.9rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-            font-family: var(--font-sans);
-        }
-
-        tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .badge-success {
-            background: var(--accent-green-glow);
-            color: var(--accent-green);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-
-        .badge-danger {
-            background: var(--accent-red-glow);
-            color: var(--accent-red);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .response-code-badge {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text-main);
-            padding: 0.15rem 0.4rem;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-
-        /* Logs console */
-        .logs-console {
-            background: #020617;
-            border: 1px solid var(--card-border);
-            border-radius: 8px;
-            font-family: 'Courier New', Courier, monospace;
-            padding: 1rem;
-            max-height: 250px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-            color: #38bdf8;
-            margin-top: 1.5rem;
-        }
-
-        .log-entry {
-            margin-bottom: 0.25rem;
-            border-left: 2px solid #38bdf8;
-            padding-left: 0.5rem;
-        }
-
-        .log-entry.success {
-            color: var(--accent-green);
-            border-color: var(--accent-green);
-        }
-
-        .log-entry.error {
-            color: var(--accent-red);
-            border-color: var(--accent-red);
-        }
-    </style>
+    /* ── Responsive ── */
+    @media(max-width:680px){ .shell{ grid-template-columns:1fr; } .sidebar{ display:none; } .main{ padding:14px; } .fgrid2{ grid-template-columns:1fr; } }
+    @media(max-width:480px){ .stat-grid{ grid-template-columns:1fr 1fr; } }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Dashboard Header -->
-        <header>
-            <div class="logo-section">
-                <h1>Idempotent Transaction Control Center</h1>
-                <p>FastAPI + PostgreSQL Row Locking & Unique Constraints Sandbox</p>
-            </div>
-            <div class="status-badge">
-                <span class="status-dot"></span>
-                <span>System Active</span>
-            </div>
-        </header>
 
-        <!-- Sandbox Panel Grid -->
-        <div class="dashboard-grid">
-            <!-- Left Grid: Account Management & Seeding -->
-            <div class="card">
-                <div class="card-title">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
-                    Account Control & Seeding
-                </div>
-                <form id="seed-account-form" onsubmit="event.preventDefault(); handleSeedAccount();">
-                    <div class="form-group">
-                        <label for="account_id">Account ID</label>
-                        <input type="text" id="account_id" placeholder="e.g. user_alice_123" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="initial_balance">Initial Balance ($)</label>
-                        <input type="number" step="0.01" id="initial_balance" value="500.00" required min="0">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Seed / Update Account</button>
-                </form>
+<div id="toasts"></div>
 
-                <div style="margin-top: 1.5rem;">
-                    <label style="margin-bottom: 0.5rem;">Active Accounts</label>
-                    <div class="list-container" id="accounts-list">
-                        <div class="list-item" style="justify-content: center; color: var(--text-muted);">
-                            No accounts seeded yet.
-                        </div>
-                    </div>
-                </div>
-            </div>
+<!-- Drawer overlay -->
+<div id="overlay" onclick="closeDrawer()"></div>
+<div id="drawer" role="dialog" aria-modal="true" aria-label="Transaction detail">
+  <button class="dr-close" onclick="closeDrawer()">✕</button>
+  <div class="dr-title">Transaction Detail</div>
+  <div id="drawer-body"></div>
+</div>
 
-            <!-- Right Grid: Single Charge Sandbox -->
-            <div class="card">
-                <div class="card-title">
-                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-                    Single Charge Transaction
-                </div>
-                <form id="charge-form" onsubmit="event.preventDefault(); handleSingleCharge();">
-                    <div class="form-group">
-                        <label for="charge_account_id">Target Account ID</label>
-                        <input type="text" id="charge_account_id" placeholder="Select or enter account ID" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="idempotency_key">Idempotency Key (UUID)</label>
-                        <div class="btn-group-row">
-                            <input type="text" id="idempotency_key" placeholder="Generate or enter UUID" required>
-                            <button type="button" class="btn-secondary" onclick="generateUUID()">Generate</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="charge_amount">Amount ($)</label>
-                        <input type="number" step="0.01" id="charge_amount" value="50.00" required min="0.01">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Process Charge</button>
-                </form>
-            </div>
-        </div>
+<div class="shell">
 
-        <!-- Concurrency Test Suites Section -->
-        <div class="card">
-            <div class="card-title">
-                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
-                Concurrency Performance Tests
-            </div>
-            <div class="test-suites">
-                <!-- Test 1 Box -->
-                <div class="test-box">
-                    <div>
-                        <h3>Test 1: 100 Duplicate Requests</h3>
-                        <p>Fires 100 concurrent requests with the <strong>same</strong> idempotency key. Asserts the balance is deducted exactly once.</p>
-                        
-                        <div id="test-1-metrics" style="display: none; margin-bottom: 1rem;">
-                            <div class="test-metric-row"><span>Target Account:</span><span id="t1-account" class="account-id-tag">-</span></div>
-                            <div class="test-metric-row"><span>Initial Balance:</span><span id="t1-init">-</span></div>
-                            <div class="test-metric-row"><span>Charges Succeeded:</span><span id="t1-success" class="metric-pass">-</span></div>
-                            <div class="test-metric-row"><span>Charges Blocked:</span><span id="t1-fail" class="metric-fail">-</span></div>
-                            <div class="test-metric-row"><span>Final Balance:</span><span id="t1-final">-</span></div>
-                            <div class="test-metric-row"><span>Status:</span><span id="t1-status">-</span></div>
-                        </div>
-                    </div>
-                    <div>
-                        <button class="btn-accent" id="btn-run-t1" style="width: 100%;" onclick="runTest(1)">Run 100 Duplicates Test</button>
-                        <div class="progress-bar-container" id="p1-container"><div class="progress-bar-fill" id="p1-fill"></div></div>
-                    </div>
-                </div>
-
-                <!-- Test 2 Box -->
-                <div class="test-box">
-                    <div>
-                        <h3>Test 2: 50 Unique Requests</h3>
-                        <p>Fires 50 concurrent requests with <strong>different</strong> keys. Asserts row-level locking works and no updates are lost.</p>
-                        
-                        <div id="test-2-metrics" style="display: none; margin-bottom: 1rem;">
-                            <div class="test-metric-row"><span>Target Account:</span><span id="t2-account" class="account-id-tag">-</span></div>
-                            <div class="test-metric-row"><span>Initial Balance:</span><span id="t2-init">-</span></div>
-                            <div class="test-metric-row"><span>Charges Succeeded:</span><span id="t2-success" class="metric-pass">-</span></div>
-                            <div class="test-metric-row"><span>Charges Failed:</span><span id="t2-fail" class="metric-fail">-</span></div>
-                            <div class="test-metric-row"><span>Final Balance:</span><span id="t2-final">-</span></div>
-                            <div class="test-metric-row"><span>Status:</span><span id="t2-status">-</span></div>
-                        </div>
-                    </div>
-                    <div>
-                        <button class="btn-accent" id="btn-run-t2" style="width: 100%;" onclick="runTest(2)">Run 50 Uniques Test</button>
-                        <div class="progress-bar-container" id="p2-container"><div class="progress-bar-fill" id="p2-fill"></div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Live Database Monitor -->
-        <div class="card monitor-card">
-            <div class="card-title">
-                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>
-                Database Transactions Log (Last 50)
-            </div>
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>TX ID</th>
-                            <th>Idempotency Key</th>
-                            <th>Account ID</th>
-                            <th>Amount</th>
-                            <th>Status</th>
-                            <th>Code</th>
-                            <th>Cached Response Body</th>
-                        </tr>
-                    </thead>
-                    <tbody id="transactions-table-body">
-                        <tr>
-                            <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading transactions...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Developer Console Logs -->
-        <div class="logs-console" id="console-logs">
-            <div class="log-entry">Control Center Console ready. Seeding accounts and charges will output telemetry logs here.</div>
-        </div>
+  <!-- ── Topbar ── -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-icon">Tx</div>
+      IdempotentTX
     </div>
+    <span class="topbar-sep">·</span>
+    <span class="topbar-sub">Operations Console</span>
+    <div class="topbar-right">
+      <span class="clock" id="clock"></span>
+      <div class="health-pill" id="hpill">
+        <span class="dot"></span>
+        <span id="htext">Connecting…</span>
+      </div>
+    </div>
+  </header>
 
-    <!-- Scripting UI Interactivity -->
-    <script>
-        const API_BASE = "";
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Monitor</div>
+      <button class="nav-btn active" id="nb-overview"     onclick="nav('overview')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Overview
+      </button>
+      <button class="nav-btn" id="nb-transactions" onclick="nav('transactions')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        Transactions
+      </button>
+      <button class="nav-btn" id="nb-accounts" onclick="nav('accounts')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Accounts
+      </button>
+    </div>
+    <div class="nav-section" style="margin-top:6px">
+      <div class="nav-label">Tools</div>
+      <button class="nav-btn" id="nb-charge" onclick="nav('charge')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Charge
+      </button>
+      <button class="nav-btn" id="nb-tests" onclick="nav('tests')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Concurrency Tests
+      </button>
+      <button class="nav-btn" id="nb-viz" onclick="nav('viz')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Idempotency Viz
+      </button>
+    </div>
+  </nav>
 
-        // Helper to output to UI console
-        function logToConsole(message, type = '') {
-            const consoleBox = document.getElementById("console-logs");
-            const entry = document.createElement("div");
-            entry.className = `log-entry ${type}`;
-            const time = new Date().toLocaleTimeString();
-            entry.innerText = `[${time}] ${message}`;
-            consoleBox.appendChild(entry);
-            consoleBox.scrollTop = consoleBox.scrollHeight;
-        }
+  <!-- ── Main ── -->
+  <main class="main">
 
-        // Generate UUID helper
-        function generateUUID() {
-            const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-            document.getElementById("idempotency_key").value = uuid;
-            logToConsole(`Generated new Idempotency Key: ${uuid}`);
-        }
+    <!-- ════════════ OVERVIEW ════════════ -->
+    <section class="page active" id="page-overview">
+      <div class="ph">
+        <div>
+          <div class="ph-title">Overview</div>
+          <div class="ph-sub">Live system snapshot · auto-refreshes every 5 s</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="refreshAll()">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.55"/></svg>
+          Refresh
+        </button>
+      </div>
 
-        // Seed or update an account balance
-        async function handleSeedAccount() {
-            const accountId = document.getElementById("account_id").value.trim();
-            const balance = document.getElementById("initial_balance").value;
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Total Accounts</div><div class="stat-val brand" id="sc-acc">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Combined Balance</div><div class="stat-val" id="sc-bal">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Transactions</div><div class="stat-val" id="sc-tx">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Successful Charges</div><div class="stat-val success" id="sc-ok">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Failed Charges</div><div class="stat-val danger" id="sc-fail">—</div></div>
+        <div class="stat-card"><div class="stat-lbl">Total Charged</div><div class="stat-val brand" id="sc-charged">—</div></div>
+      </div>
 
-            logToConsole(`Sending seed request for account: ${accountId} with balance: $${balance}...`);
-            try {
-                const response = await fetch(`${API_BASE}/accounts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ account_id: accountId, balance: parseFloat(balance) })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    logToConsole(`Seeding success: ${data.message} (${data.account_id}, balance: $${data.balance})`, 'success');
-                    // Pre-fill target account input fields
-                    document.getElementById("charge_account_id").value = data.account_id;
-                    refreshData();
-                } else {
-                    logToConsole(`Seeding failed: ${data.detail || JSON.stringify(data)}`, 'error');
-                }
-            } catch (err) {
-                logToConsole(`Network error seeding account: ${err.message}`, 'error');
-            }
-        }
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            Recent Transactions
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="nav('transactions')">View all →</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Time</th><th>Account</th><th>Amount</th><th>Status</th><th>Code</th></tr></thead>
+            <tbody id="ov-tx-body"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
 
-        // Send a single charge request
-        async function handleSingleCharge() {
-            const accountId = document.getElementById("charge_account_id").value.trim();
-            const key = document.getElementById("idempotency_key").value.trim();
-            const amount = document.getElementById("charge_amount").value;
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            Account Balances
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="nav('accounts')">Manage →</button>
+        </div>
+        <div id="ov-accounts" style="max-height:230px;overflow-y:auto"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
 
-            logToConsole(`Executing charge: $${amount} to account ${accountId} with key ${key}...`);
-            try {
-                const response = await fetch(`${API_BASE}/charge`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        idempotency_key: key,
-                        account_id: accountId,
-                        amount: parseFloat(amount)
-                    })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    logToConsole(`Charge completed (HTTP ${response.status}): ${JSON.stringify(data)}`, 'success');
-                } else {
-                    logToConsole(`Charge failed (HTTP ${response.status}): ${JSON.stringify(data)}`, 'error');
-                }
-                refreshData();
-            } catch (err) {
-                logToConsole(`Network error processing charge: ${err.message}`, 'error');
-            }
-        }
+    <!-- ════════════ TRANSACTIONS ════════════ -->
+    <section class="page" id="page-transactions">
+      <div class="ph">
+        <div>
+          <div class="ph-title">Transactions</div>
+          <div class="ph-sub">Click any row for full detail · filter by account or status</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadTx()">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.55"/></svg>
+          Refresh
+        </button>
+      </div>
+      <div class="card">
+        <div class="fbar">
+          <input  class="finput wide" id="tx-q"  placeholder="Search account or key…" oninput="renderTx()" />
+          <select class="fsel"         id="tx-sf" onchange="loadTx()">
+            <option value="">All statuses</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="FAILED_INSUFFICIENT_FUNDS">INSUF. FUNDS</option>
+            <option value="FAILED_NOT_FOUND">NOT FOUND</option>
+          </select>
+          <span id="tx-count" style="font-size:.75rem;color:var(--text3);margin-left:auto"></span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Time</th><th>Key (truncated)</th><th>Account</th><th>Amount</th><th>Status</th><th>Code</th></tr></thead>
+            <tbody id="tx-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:7px;padding:10px 14px;border-top:1px solid var(--border);align-items:center">
+          <button class="btn btn-secondary btn-sm" id="tx-prev" onclick="txPg(-1)" disabled>← Prev</button>
+          <span id="tx-pglbl" style="font-size:.76rem;color:var(--text3)"></span>
+          <button class="btn btn-secondary btn-sm" id="tx-next" onclick="txPg(1)">Next →</button>
+        </div>
+      </div>
+    </section>
 
-        // Run Performance Concurrency Tests
-        async function runTest(testNum) {
-            const btn = document.getElementById(`btn-run-t` + testNum);
-            const progressContainer = document.getElementById(`p` + testNum + `-container`);
-            const progressFill = document.getElementById(`p` + testNum + `-fill`);
-            const metricsDiv = document.getElementById(`test-` + testNum + `-metrics`);
+    <!-- ════════════ ACCOUNTS ════════════ -->
+    <section class="page" id="page-accounts">
+      <div class="ph"><div class="ph-title">Accounts</div></div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">All Accounts</div>
+            <button class="btn btn-ghost btn-sm" onclick="loadAccounts()">Refresh</button>
+          </div>
+          <div id="acc-list" style="max-height:450px;overflow-y:auto"><div class="empty">Loading…</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">Create / Seed Account</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:13px">
+            <div class="fg">
+              <label class="flbl" for="a-id">Account ID</label>
+              <input class="finput" id="a-id" placeholder="e.g. user_alice_prod" maxlength="128"/>
+            </div>
+            <div class="fg">
+              <label class="flbl" for="a-bal">Initial Balance ($)</label>
+              <input class="finput" id="a-bal" type="number" step="0.01" min="0" value="500.00"/>
+            </div>
+            <button class="btn btn-primary btn-full" id="a-btn" onclick="submitAccount()">Seed / Update Account</button>
+            <div id="a-res" style="font-size:.78rem;display:none"></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-            btn.disabled = true;
-            btn.innerText = "Running Concurrency Test...";
-            progressContainer.style.display = "block";
-            progressFill.style.width = "0%";
-            metricsDiv.style.display = "none";
+    <!-- ════════════ CHARGE ════════════ -->
+    <section class="page" id="page-charge">
+      <div class="ph">
+        <div>
+          <div class="ph-title">Charge</div>
+          <div class="ph-sub">Submit an idempotent charge · the same key always returns the same response</div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head"><div class="card-title">New Charge</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:13px">
+            <div class="fg">
+              <label class="flbl" for="ch-acc">Account ID</label>
+              <input class="finput" id="ch-acc" placeholder="Enter account ID" maxlength="128"/>
+            </div>
+            <div class="fg">
+              <label class="flbl" for="ch-key">Idempotency Key (UUID v4)</label>
+              <div class="irow">
+                <input class="finput" id="ch-key" placeholder="xxxxxxxx-xxxx-4xxx-…"/>
+                <button class="btn btn-secondary btn-sm" onclick="genUUID('ch-key')" title="Generate new UUID">New</button>
+              </div>
+            </div>
+            <div class="fg">
+              <label class="flbl" for="ch-amt">Amount ($)</label>
+              <input class="finput" id="ch-amt" type="number" step="0.01" min="0.01" value="25.00"/>
+            </div>
+            <button class="btn btn-primary btn-full" id="ch-btn" onclick="submitCharge()">Process Charge</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">Response</div></div>
+          <div class="card-body" id="ch-resp"><div class="empty" style="padding:38px 0">Submit a charge to see the response.</div></div>
+        </div>
+      </div>
+    </section>
 
-            logToConsole(`Starting Concurrent Test ${testNum} on the backend...`);
+    <!-- ════════════ TESTS ════════════ -->
+    <section class="page" id="page-tests">
+      <div class="ph">
+        <div>
+          <div class="ph-title">Concurrency Tests</div>
+          <div class="ph-sub">Real tests executing against the live PostgreSQL database — not simulations</div>
+        </div>
+      </div>
 
-            // Simulate progress animation
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += (100 - progress) * 0.15;
-                progressFill.style.width = `${Math.min(progress, 95)}%`;
-            }, 300);
+      <div class="test-grid">
+        <div class="tbox">
+          <div class="tbox-head">
+            <div class="tbox-title">Test 1 — 100 Duplicate Requests</div>
+            <div class="tbox-desc">Fires 100 concurrent charges sharing the <em>same</em> idempotency key. Asserts balance deducted exactly once and only 1 DB record created.</div>
+          </div>
+          <div class="tbox-body">
+            <div style="font-size:.73rem;color:var(--text3)">Account: fresh · Balance: $100.00 · Charge: $10.00 · Expected final: $90.00</div>
+            <div class="prog-bar" id="t1-prog"><div class="prog-fill" id="t1-fill"></div></div>
+            <button class="btn btn-primary btn-full" id="t1-btn" onclick="runTest(1)">▶ Run Test 1</button>
+            <div class="result-panel" id="t1-res"></div>
+          </div>
+        </div>
+        <div class="tbox">
+          <div class="tbox-head">
+            <div class="tbox-title">Test 2 — 50 Distinct Requests</div>
+            <div class="tbox-desc">Fires 50 concurrent charges each with a <em>unique</em> key. Asserts SELECT FOR UPDATE prevents lost updates and all 50 land correctly.</div>
+          </div>
+          <div class="tbox-body">
+            <div style="font-size:.73rem;color:var(--text3)">Account: fresh · Balance: $1,000.00 · Charge: $15.50 × 50 · Expected final: $225.00</div>
+            <div class="prog-bar" id="t2-prog"><div class="prog-fill" id="t2-fill"></div></div>
+            <button class="btn btn-primary btn-full" id="t2-btn" onclick="runTest(2)">▶ Run Test 2</button>
+            <div class="result-panel" id="t2-res"></div>
+          </div>
+        </div>
+      </div>
 
-            try {
-                const response = await fetch(`${API_BASE}/api/run-test-${testNum}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const data = await response.json();
-                clearInterval(progressInterval);
-                progressFill.style.width = "100%";
+      <div class="card">
+        <div class="card-head"><div class="card-title">How it works</div></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div>
+            <div style="font-size:.78rem;font-weight:600;color:var(--brand);margin-bottom:5px">Idempotency — Test 1</div>
+            <ol style="font-size:.78rem;color:var(--text2);line-height:1.75;padding-left:15px">
+              <li>100 requests arrive simultaneously with the same UUID key.</li>
+              <li>One wins the race: inserts a Transaction row (UNIQUE constraint on <code>idempotency_key</code>).</li>
+              <li>The other 99 either find the row on the pre-check and replay it, or catch the IntegrityError and look up the winner's committed response.</li>
+              <li>Balance deducted exactly once. DB record count = 1.</li>
+            </ol>
+          </div>
+          <div>
+            <div style="font-size:.78rem;font-weight:600;color:var(--brand);margin-bottom:5px">Row Locking — Test 2</div>
+            <ol style="font-size:.78rem;color:var(--text2);line-height:1.75;padding-left:15px">
+              <li>50 requests each carry a distinct UUID — all are legitimate charges.</li>
+              <li>Each acquires <code>SELECT … FOR UPDATE</code> on the account row before reading the balance.</li>
+              <li>Locks serialize updates: each sees the previous committed balance.</li>
+              <li>All 50 succeed; final balance = $1,000 − 50 × $15.50 = $225.00.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
 
-                if (response.ok) {
-                    logToConsole(`Test ${testNum} Finished. Passed: ${data.passed}. Final Account: ${data.account_id}`, data.passed ? 'success' : 'error');
-                    
-                    // Display metrics on page
-                    document.getElementById(`t` + testNum + `-account`).innerText = data.account_id;
-                    document.getElementById(`t` + testNum + `-init`).innerText = `$${data.initial_balance.toFixed(2)}`;
-                    document.getElementById(`t` + testNum + `-success`).innerText = `${data.success_count} Requests`;
-                    document.getElementById(`t` + testNum + `-fail`).innerText = `${data.fail_count} Requests`;
-                    document.getElementById(`t` + testNum + `-final`).innerText = `$${data.final_balance.toFixed(2)} (Expected: $${data.expected_final_balance.toFixed(2)})`;
-                    
-                    const statusTag = document.getElementById(`t` + testNum + `-status`);
-                    statusTag.className = data.passed ? 'metric-pass' : 'metric-fail';
-                    statusTag.innerText = data.passed ? "PASSED (100% Correct)" : "FAILED (Race Conditions Detected)";
-                    
-                    metricsDiv.style.display = "block";
-                } else {
-                    logToConsole(`Test ${testNum} execution failed: ${data.detail || JSON.stringify(data)}`, 'error');
-                }
-                
-                // Keep progress showing for a brief moment, then hide and restore button
-                setTimeout(() => {
-                    progressContainer.style.display = "none";
-                    btn.disabled = false;
-                    btn.innerText = testNum === 1 ? "Run 100 Duplicates Test" : "Run 50 Uniques Test";
-                }, 2000);
+    <!-- ════════════ VIZ ════════════ -->
+    <section class="page" id="page-viz">
+      <div class="ph">
+        <div>
+          <div class="ph-title">Idempotency Visualizer</div>
+          <div class="ph-sub">Interactive simulation — illustrative only. Use the Concurrency Tests tab for real verification.</div>
+        </div>
+      </div>
 
-                refreshData();
-            } catch (err) {
-                clearInterval(progressInterval);
-                logToConsole(`Network error running Test ${testNum}: ${err.message}`, 'error');
-                progressContainer.style.display = "none";
-                btn.disabled = false;
-                btn.innerText = testNum === 1 ? "Run 100 Duplicates Test" : "Run 50 Uniques Test";
-            }
-        }
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">100 Concurrent Duplicate Requests → 1 Effective Charge</div>
+          <div style="display:flex;gap:7px">
+            <button class="btn btn-secondary btn-sm" onclick="resetViz()">Reset</button>
+            <button class="btn btn-primary btn-sm" id="viz-btn" onclick="runViz()">▶ Simulate</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:.76rem;color:var(--text3);margin-bottom:11px">
+            Each dot = one HTTP request. &nbsp;
+            <span style="color:var(--info)">●</span> In-flight &nbsp;
+            <span style="color:var(--success)">●</span> Winner (1 charge applied) &nbsp;
+            <span style="color:var(--brand)">●</span> Duplicate — cached response replayed
+          </p>
+          <div class="req-stream" id="req-stream"></div>
+          <div class="viz-stats">
+            <div class="vs"><div class="vs-val" id="vz-total" style="color:var(--info)">0</div><div class="vs-lbl">Requests fired</div></div>
+            <div class="vs"><div class="vs-val" id="vz-win"   style="color:var(--success)">0</div><div class="vs-lbl">Effective charges</div></div>
+            <div class="vs"><div class="vs-val" id="vz-dup"   style="color:var(--brand)">0</div><div class="vs-lbl">Duplicates blocked</div></div>
+          </div>
+          <div id="viz-note" style="margin-top:13px;font-size:.8rem;color:var(--text2);display:none"></div>
+        </div>
+      </div>
+    </section>
 
-        // Fetch accounts and transactions from backend and refresh views
-        async function refreshData() {
-            // Load accounts
-            try {
-                const response = await fetch(`${API_BASE}/api/accounts`);
-                if (response.ok) {
-                    const accounts = await response.json();
-                    const container = document.getElementById("accounts-list");
-                    if (accounts.length === 0) {
-                        container.innerHTML = `<div class="list-item" style="justify-content: center; color: var(--text-muted);">No accounts seeded yet.</div>`;
-                    } else {
-                        container.innerHTML = accounts.map(acc => `
-                            <div class="list-item">
-                                <span class="account-id-tag" onclick="selectAccount('${acc.account_id}')" style="cursor:pointer;" title="Click to select">${acc.account_id}</span>
-                                <span class="balance-tag">$${acc.balance.toFixed(2)}</span>
-                            </div>
-                        `).join('');
-                    }
-                }
-            } catch (err) {
-                console.error("Error loading accounts:", err);
-            }
+  </main>
+</div><!-- /shell -->
 
-            // Load transactions
-            try {
-                const response = await fetch(`${API_BASE}/api/transactions`);
-                if (response.ok) {
-                    const transactions = await response.json();
-                    const body = document.getElementById("transactions-table-body");
-                    if (transactions.length === 0) {
-                        body.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No transactions recorded in DB.</td></tr>`;
-                    } else {
-                        body.innerHTML = transactions.map(tx => {
-                            const badgeClass = tx.status === 'SUCCESS' ? 'badge-success' : 'badge-danger';
-                            const codeClass = tx.response_code >= 200 && tx.response_code < 300 ? 'metric-pass' : 'metric-fail';
-                            return `
-                                <tr>
-                                    <td>${tx.id}</td>
-                                    <td style="font-family: monospace; font-size: 0.8rem; color: var(--accent-cyan);">${tx.idempotency_key}</td>
-                                    <td><span class="account-id-tag">${tx.account_id}</span></td>
-                                    <td style="font-weight:600;">$${tx.amount.toFixed(2)}</td>
-                                    <td><span class="badge ${badgeClass}">${tx.status}</span></td>
-                                    <td><span class="response-code-badge ${codeClass}">${tx.response_code}</span></td>
-                                    <td style="font-family: monospace; font-size: 0.75rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title='${JSON.stringify(tx.response_body)}'>
-                                        ${JSON.stringify(tx.response_body)}
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('');
-                    }
-                }
-            } catch (err) {
-                console.error("Error loading transactions:", err);
-            }
-        }
+<script>
+/* ══════════════════════════════════════════════════════
+   Helpers
+══════════════════════════════════════════════════════ */
+const API = '';
 
-        function selectAccount(id) {
-            document.getElementById("charge_account_id").value = id;
-            logToConsole(`Selected account ID: ${id}`);
-        }
+const $  = id => document.getElementById(id);
+const fmt = (n, d=2) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const usd = n => '$' + fmt(n);
+const ts  = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+         d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+};
+const trunc = (s,n=24) => s.length>n ? s.slice(0,n)+'…' : s;
 
-        // Initialize values
-        window.addEventListener('DOMContentLoaded', () => {
-            generateUUID();
-            refreshData();
-            // Polling database state every 5 seconds to keep table fresh
-            setInterval(refreshData, 5000);
-        });
-    </script>
+function genUUID(id) {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  a[6]=(a[6]&0x0f)|0x40; a[8]=(a[8]&0x3f)|0x80;
+  const h = [...a].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const u = `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+  $(id).value = u; return u;
+}
+
+function sBadge(s) {
+  if (s==='SUCCESS')                    return `<span class="badge b-ok">SUCCESS</span>`;
+  if (s==='FAILED_INSUFFICIENT_FUNDS')  return `<span class="badge b-warn">INSUF. FUNDS</span>`;
+  if (s==='FAILED_NOT_FOUND')           return `<span class="badge b-err">NOT FOUND</span>`;
+  return `<span class="badge b-muted">${s}</span>`;
+}
+function cBadge(c) {
+  if (c===200) return `<span class="badge b-ok">${c}</span>`;
+  if (c===400) return `<span class="badge b-warn">${c}</span>`;
+  return `<span class="badge b-err">${c}</span>`;
+}
+
+function toast(msg, type='inf') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(()=>el.remove(), 4200);
+}
+
+/* ══════════════════════════════════════════════════════
+   Navigation
+══════════════════════════════════════════════════════ */
+function nav(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  $(`page-${page}`).classList.add('active');
+  $(`nb-${page}`)?.classList.add('active');
+  if (page==='overview')     refreshAll();
+  else if (page==='transactions') loadTx();
+  else if (page==='accounts')     loadAccounts();
+  else if (page==='viz')          initViz();
+}
+
+/* ══════════════════════════════════════════════════════
+   Clock + health
+══════════════════════════════════════════════════════ */
+function tick() { $('clock').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+setInterval(tick,1000); tick();
+
+async function checkHealth() {
+  try {
+    const ok = (await fetch(`${API}/healthz`)).ok;
+    const pill=$('hpill'), txt=$('htext');
+    pill.style.background   = ok ? 'var(--success-bg)' : 'var(--danger-bg)';
+    pill.style.borderColor  = ok ? 'rgba(62,207,142,.2)' : 'rgba(224,84,84,.2)';
+    pill.style.color        = ok ? 'var(--success)' : 'var(--danger)';
+    txt.textContent         = ok ? 'System Online'   : 'System Offline';
+    pill.querySelector('.dot').style.background = ok ? 'var(--success)' : 'var(--danger)';
+  } catch {}
+}
+checkHealth(); setInterval(checkHealth,10000);
+
+/* ══════════════════════════════════════════════════════
+   Stats
+══════════════════════════════════════════════════════ */
+async function loadStats() {
+  try {
+    const d = await (await fetch(`${API}/api/stats`)).json();
+    $('sc-acc').textContent     = d.total_accounts;
+    $('sc-bal').textContent     = usd(d.total_balance);
+    $('sc-tx').textContent      = d.total_transactions;
+    $('sc-ok').textContent      = d.successful_charges;
+    $('sc-fail').textContent    = d.failed_charges;
+    $('sc-charged').textContent = usd(d.total_charged);
+  } catch {}
+}
+
+/* ══════════════════════════════════════════════════════
+   Overview recent txs
+══════════════════════════════════════════════════════ */
+async function loadOvTx() {
+  try {
+    const txs = await (await fetch(`${API}/api/transactions?limit=10`)).json();
+    const b = $('ov-tx-body');
+    if (!txs.length) { b.innerHTML=`<tr><td colspan="6" class="empty">No transactions yet.</td></tr>`; return; }
+    b.innerHTML = txs.map(t=>`
+      <tr onclick='openDrawer(${JSON.stringify(t)})' style="cursor:pointer">
+        <td class="mono" style="color:var(--text3)">#${t.id}</td>
+        <td style="color:var(--text2);font-size:.74rem">${ts(t.created_at)}</td>
+        <td class="mono" style="color:var(--info)">${trunc(t.account_id,20)}</td>
+        <td style="font-weight:600">${usd(t.amount)}</td>
+        <td>${sBadge(t.status)}</td>
+        <td>${cBadge(t.response_code)}</td>
+      </tr>`).join('');
+  } catch {}
+}
+
+/* ══════════════════════════════════════════════════════
+   Overview accounts
+══════════════════════════════════════════════════════ */
+async function loadOvAccounts() {
+  try {
+    const accs = await (await fetch(`${API}/api/accounts`)).json();
+    const el = $('ov-accounts');
+    if (!accs.length) { el.innerHTML=`<div class="empty">No accounts yet.</div>`; return; }
+    el.innerHTML = accs.map(a=>`
+      <div class="acc-row" onclick="goCharge('${a.account_id}')">
+        <span class="acc-id">${a.account_id}</span>
+        <span class="acc-bal">${usd(a.balance)}</span>
+      </div>`).join('');
+  } catch {}
+}
+
+function refreshAll() { loadStats(); loadOvTx(); loadOvAccounts(); }
+
+/* ══════════════════════════════════════════════════════
+   Transactions page
+══════════════════════════════════════════════════════ */
+let _txCache=[], _txPg=0;
+const TX_PS=25;
+
+async function loadTx() {
+  const sf = $('tx-sf')?.value||'';
+  const params = new URLSearchParams({limit:TX_PS+1, offset:_txPg*TX_PS});
+  if (sf) params.set('status',sf);
+  try {
+    _txCache = await (await fetch(`${API}/api/transactions?${params}`)).json();
+    renderTx();
+  } catch {}
+}
+
+function renderTx() {
+  const q = ($('tx-q')?.value||'').toLowerCase();
+  const rows = _txCache.filter(t=>
+    !q || t.account_id.toLowerCase().includes(q) || t.idempotency_key.toLowerCase().includes(q)
+  );
+  const hasMore = rows.length > TX_PS;
+  const show = rows.slice(0,TX_PS);
+  const b = $('tx-body');
+  if (!show.length) { b.innerHTML=`<tr><td colspan="7" class="empty">No transactions found.</td></tr>`; }
+  else b.innerHTML = show.map(t=>`
+    <tr onclick='openDrawer(${JSON.stringify(t)})' style="cursor:pointer">
+      <td class="mono" style="color:var(--text3)">#${t.id}</td>
+      <td style="color:var(--text2);font-size:.74rem;white-space:nowrap">${ts(t.created_at)}</td>
+      <td class="mono" style="color:var(--text3);font-size:.73rem">${trunc(t.idempotency_key,16)}</td>
+      <td class="mono" style="color:var(--info)">${trunc(t.account_id,22)}</td>
+      <td style="font-weight:600">${usd(t.amount)}</td>
+      <td>${sBadge(t.status)}</td>
+      <td>${cBadge(t.response_code)}</td>
+    </tr>`).join('');
+  $('tx-count').textContent = `${show.length}${hasMore?'+':''} shown`;
+  $('tx-prev').disabled = _txPg===0;
+  $('tx-next').disabled = !hasMore;
+  $('tx-pglbl').textContent = `Page ${_txPg+1}`;
+}
+
+function txPg(d) { _txPg=Math.max(0,_txPg+d); loadTx(); }
+
+/* ══════════════════════════════════════════════════════
+   Accounts page
+══════════════════════════════════════════════════════ */
+async function loadAccounts() {
+  const el = $('acc-list');
+  el.innerHTML=`<div class="empty">Loading…</div>`;
+  try {
+    const accs = await (await fetch(`${API}/api/accounts`)).json();
+    if (!accs.length) { el.innerHTML=`<div class="empty">No accounts yet.</div>`; return; }
+    el.innerHTML = accs.map(a=>`
+      <div class="acc-row" onclick="goCharge('${a.account_id}')">
+        <div>
+          <div class="acc-id">${a.account_id}</div>
+          <div style="font-size:.68rem;color:var(--text3);margin-top:1px">${a.created_at?ts(a.created_at):''}</div>
+        </div>
+        <span class="acc-bal">${usd(a.balance)}</span>
+      </div>`).join('');
+  } catch { el.innerHTML=`<div class="empty">Failed to load.</div>`; }
+}
+
+async function submitAccount() {
+  const id=$('a-id').value.trim(), bal=$('a-bal').value;
+  if (!id) { toast('Account ID is required.','err'); return; }
+  if (isNaN(+bal)||+bal<0) { toast('Enter a valid balance.','err'); return; }
+  const btn=$('a-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  try {
+    const r = await fetch(`${API}/accounts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account_id:id,balance:+bal})});
+    const d = await r.json();
+    if (r.ok) { toast(`${d.message}: ${d.account_id} → ${usd(d.balance)}`,'ok'); loadAccounts(); $('a-id').value=''; }
+    else toast(d.detail||'Failed.','err');
+  } catch { toast('Network error.','err'); }
+  finally { btn.disabled=false; btn.textContent='Seed / Update Account'; }
+}
+
+function goCharge(id) { nav('charge'); $('ch-acc').value=id; genUUID('ch-key'); }
+
+/* ══════════════════════════════════════════════════════
+   Charge page
+══════════════════════════════════════════════════════ */
+async function submitCharge() {
+  const acc=$('ch-acc').value.trim(), key=$('ch-key').value.trim(), amt=$('ch-amt').value;
+  if (!acc) { toast('Account ID required.','err'); return; }
+  if (!key) { toast('Idempotency key required.','err'); return; }
+  if (isNaN(+amt)||+amt<=0) { toast('Enter a valid amount.','err'); return; }
+
+  const btn=$('ch-btn'); btn.disabled=true; btn.textContent='Processing…';
+  const panel=$('ch-resp'); panel.innerHTML=`<div class="empty">Sending…</div>`;
+
+  try {
+    const r = await fetch(`${API}/charge`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idempotency_key:key,account_id:acc,amount:+amt})});
+    const d = await r.json();
+    const ok=r.status===200;
+    const col=ok?'var(--success)':(r.status===400?'var(--warn)':'var(--danger)');
+
+    panel.innerHTML = `
+      <div style="margin-bottom:12px">${cBadge(r.status)}
+        <span style="margin-left:7px;font-weight:600;color:${col}">${ok?(d.message||'Charge successful'):(d.error||'Charge failed')}</span>
+      </div>
+      ${ok?`
+        <div class="res-row" style="margin-bottom:7px"><span class="res-lbl">Account</span><span class="res-val">${d.account_id}</span></div>
+        <div class="res-row" style="margin-bottom:7px"><span class="res-lbl">Charged</span><span class="res-val" style="color:var(--danger)">−${usd(d.amount)}</span></div>
+        <div class="res-row" style="margin-bottom:13px"><span class="res-lbl">New Balance</span><span class="res-val" style="color:var(--success)">${usd(d.new_balance)}</span></div>
+      `:`<div style="font-size:.78rem;color:var(--text2);margin-bottom:13px">${JSON.stringify(d,null,2)}</div>`}
+      <div class="dr-lbl">Idempotency Key</div>
+      <div class="dr-val mono" style="margin-top:3px">${key}</div>`;
+    toast(ok?'Charge processed.':`Charge failed: ${d.error||r.status}`, ok?'ok':'err');
+  } catch(e) { panel.innerHTML=`<div class="empty">Network error: ${e.message}</div>`; toast('Network error.','err'); }
+  finally { btn.disabled=false; btn.textContent='Process Charge'; }
+}
+
+/* ══════════════════════════════════════════════════════
+   Concurrency tests
+══════════════════════════════════════════════════════ */
+async function runTest(n) {
+  const btn=$(`t${n}-btn`), prog=$(`t${n}-prog`), fill=$(`t${n}-fill`), res=$(`t${n}-res`);
+  btn.disabled=true; btn.textContent='Running…';
+  prog.style.display='block'; fill.style.width='0%';
+  res.style.display='none';
+
+  let pct=0;
+  const ticker=setInterval(()=>{ pct=Math.min(pct+(100-pct)*.1,88); fill.style.width=pct+'%'; },350);
+
+  try {
+    const r = await fetch(`${API}/api/run-test-${n}`,{method:'POST'});
+    const d = await r.json();
+    clearInterval(ticker); fill.style.width='100%';
+    const passed=d.passed;
+    const checks=d.checks||{};
+
+    res.innerHTML = `
+      <div class="pass-banner" style="color:${passed?'var(--success)':'var(--danger)'}">
+        ${passed?'✓ ALL CHECKS PASSED':'✗ CHECKS FAILED'}
+      </div>
+      <div class="res-row"><span class="res-lbl">Account</span><span class="res-val" style="font-size:.7rem">${d.account_id}</span></div>
+      <div class="res-row"><span class="res-lbl">Final balance</span><span class="res-val">${usd(d.final_balance)} <span style="color:var(--text3);font-weight:400">(exp. ${usd(d.expected_final_balance)})</span></span></div>
+      <div class="res-row"><span class="res-lbl">Success / fail</span><span class="res-val">${d.success_count} / ${d.fail_count}</span></div>
+      ${d.transaction_records!==undefined?`<div class="res-row"><span class="res-lbl">DB records</span><span class="res-val">${d.transaction_records}</span></div>`:''}
+      <div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
+        ${Object.entries(checks).map(([k,v])=>`
+          <div class="res-row"><span class="res-lbl">${k.replace(/_/g,' ')}</span><span class="res-val ${v?'pass':'fail'}">${v?'✓ PASS':'✗ FAIL'}</span></div>`).join('')}
+      </div>`;
+    res.style.display='block';
+    toast(`Test ${n} ${passed?'PASSED':'FAILED'}`, passed?'ok':'err');
+    loadStats();
+    setTimeout(()=>{ prog.style.display='none'; btn.disabled=false; btn.textContent=`▶ Run Test ${n}`; },1400);
+  } catch(e) {
+    clearInterval(ticker);
+    prog.style.display='none'; btn.disabled=false; btn.textContent=`▶ Run Test ${n}`;
+    toast(`Test ${n} error: ${e.message}`,'err');
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   Drawer
+══════════════════════════════════════════════════════ */
+function openDrawer(tx) {
+  $('drawer-body').innerHTML = `
+    <div class="dr-sec"><div class="dr-lbl">Transaction ID</div><div class="dr-val mono">#${tx.id}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Timestamp</div><div class="dr-val">${ts(tx.created_at)}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Status</div><div style="margin-top:3px">${sBadge(tx.status)}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">HTTP Code</div><div style="margin-top:3px">${cBadge(tx.response_code)}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Account</div><div class="dr-val mono">${tx.account_id}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Amount</div><div class="dr-val" style="font-size:1.05rem;font-weight:700">${usd(tx.amount)}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Idempotency Key</div><div class="dr-val mono">${tx.idempotency_key}</div></div>
+    <div class="dr-sec"><div class="dr-lbl">Cached Response Body (JSONB)</div><div class="json-block">${JSON.stringify(tx.response_body,null,2)}</div></div>`;
+  $('overlay').style.display='block';
+  setTimeout(()=>$('drawer').classList.add('open'),8);
+}
+function closeDrawer() {
+  $('drawer').classList.remove('open');
+  setTimeout(()=>{ $('overlay').style.display='none'; },230);
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrawer(); });
+
+/* ══════════════════════════════════════════════════════
+   Idempotency Visualizer
+══════════════════════════════════════════════════════ */
+const VN=100; let vizRunning=false;
+
+function initViz() {
+  if ($('req-stream').children.length===VN) return;
+  resetViz();
+}
+function resetViz() {
+  vizRunning=false;
+  $('viz-btn').disabled=false; $('viz-btn').textContent='▶ Simulate';
+  $('vz-total').textContent=$('vz-win').textContent=$('vz-dup').textContent='0';
+  $('viz-note').style.display='none';
+  const s=$('req-stream'); s.innerHTML='';
+  for(let i=0;i<VN;i++){const d=document.createElement('div');d.className='rdot';s.appendChild(d);}
+}
+async function runViz() {
+  if(vizRunning)return; vizRunning=true;
+  const btn=$('viz-btn'); btn.disabled=true; btn.textContent='Simulating…';
+  const dots=[...$('req-stream').children];
+  dots.forEach(d=>{d.className='rdot';});
+  $('vz-total').textContent=VN;
+  await sleep(280);
+  const order=[...Array(VN).keys()].sort(()=>Math.random()-.5);
+  let win=0,dup=0;
+  for(let i=0;i<order.length;i++){
+    await sleep(16);
+    if(i===0){dots[order[i]].className='rdot win';win=1;}
+    else{dots[order[i]].className='rdot dup';dup++;}
+    $('vz-win').textContent=win;
+    $('vz-dup').textContent=dup;
+  }
+  const note=$('viz-note');
+  note.innerHTML=`<span style="color:var(--success);font-weight:600">✓ Simulation complete.</span> ${VN} requests fired, 1 effective charge, ${VN-1} duplicates blocked by idempotency. <span style="color:var(--brand)">Run Test 1</span> in Concurrency Tests for the real live result.`;
+  note.style.display='block';
+  btn.disabled=false; btn.textContent='↺ Re-simulate'; vizRunning=false;
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+/* ══════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded',()=>{
+  genUUID('ch-key');
+  refreshAll();
+  setInterval(()=>{ if($('page-overview').classList.contains('active')) refreshAll(); },5000);
+});
+</script>
 </body>
 </html>

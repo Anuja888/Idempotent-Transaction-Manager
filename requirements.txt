@@ -5,3 +5,7 @@ asyncpg==0.31.0
 pydantic==2.13.4
 httpx==0.28.1
 python-multipart==0.0.20
+
+# Testing
+pytest==9.1.1
+pytest-asyncio==1.4.0

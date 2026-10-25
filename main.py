@@ -1,11 +1,28 @@
+"""
+Idempotent Transaction Processor — FastAPI application.
+
+Key design decisions
+────────────────────
+• Every charge carries a client-provided UUID idempotency key.  The key is
+  stored with a UNIQUE constraint; any duplicate INSERT raises IntegrityError
+  which is caught and the winning transaction's cached response is replayed.
+• Account rows are locked with SELECT … FOR UPDATE before any balance mutation
+  so concurrent distinct charges serialize correctly.
+• All money is stored / computed as Python Decimal / PostgreSQL NUMERIC(12,2).
+  Float values only appear in JSON response bodies for human readability.
+• The _do_charge() helper is shared between the HTTP endpoint and the
+  in-process concurrency-test runners so the business logic is tested once.
+"""
+
 import uuid
 import asyncio
 from decimal import Decimal
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -16,54 +33,61 @@ import os
 from database import get_db, engine, Base, AsyncSessionLocal
 from models import Account, Transaction
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger("transaction_processor")
 
 
-# ---------------------------------------------------------------------------
-# Lifespan – create tables on startup
-# ---------------------------------------------------------------------------
+# ── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Create DB tables on startup (idempotent — safe to run repeatedly)."""
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables initialized.")
-    except Exception as exc:  # pragma: no cover
-        # On a cold-start the DB might not be reachable yet; log and continue
-        # so the function doesn't crash before the first real request.
+        logger.info("Database tables initialised.")
+    except Exception as exc:          # pragma: no cover
         logger.warning("Could not initialise DB on startup: %s", exc)
     yield
     await engine.dispose()
     logger.info("Database connections closed.")
 
 
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
-app = FastAPI(title="Idempotent Transaction Processor", lifespan=lifespan)
+# ── App ───────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="Idempotent Transaction Processor",
+    description=(
+        "Payment-style transaction processor demonstrating idempotent charging "
+        "with PostgreSQL row-level locking and UNIQUE constraint enforcement."
+    ),
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
+# ── Pydantic schemas ──────────────────────────────────────────────────────────
 class ChargeRequest(BaseModel):
     idempotency_key: uuid.UUID
-    account_id: str
-    amount: Decimal = Field(..., gt=0)
+    account_id: str = Field(..., min_length=1, max_length=128)
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
 
 
 class AccountCreateRequest(BaseModel):
-    account_id: str
-    balance: Decimal = Field(..., ge=0)
+    account_id: str = Field(..., min_length=1, max_length=128)
+    balance: Decimal = Field(..., ge=0, decimal_places=2)
 
 
-# ---------------------------------------------------------------------------
-# Core charge logic (shared between the API endpoint and the in-process tests)
-# ---------------------------------------------------------------------------
+# ── Core charge logic ─────────────────────────────────────────────────────────
 async def _do_charge(
     idempotency_key: uuid.UUID,
     account_id: str,
@@ -71,13 +95,14 @@ async def _do_charge(
     db: AsyncSession,
 ) -> tuple[int, dict]:
     """
-    Attempt a charge against *account_id* inside a single DB transaction.
+    Execute one idempotent charge inside a single serialised DB transaction.
 
     Returns (http_status_code, response_body_dict).
-    Raises IntegrityError on a duplicate-key race – caller must handle.
+    Raises IntegrityError when a concurrent request inserts the same
+    idempotency_key first — the caller must catch this and replay the winner.
     """
     async with db.begin():
-        # 1. Fast idempotency check
+        # ── 1. Idempotency check ──────────────────────────────────────────
         existing = await db.execute(
             select(Transaction).where(Transaction.idempotency_key == idempotency_key)
         )
@@ -86,16 +111,19 @@ async def _do_charge(
             logger.info("Idempotency hit for key %s", idempotency_key)
             return tx.response_code, tx.response_body
 
-        # 2. Row-level lock on the account
+        # ── 2. Row-level lock on the account ──────────────────────────────
         account_result = await db.execute(
             select(Account).where(Account.id == account_id).with_for_update()
         )
         account = account_result.scalar_one_or_none()
 
+        # ── 3. Business logic ─────────────────────────────────────────────
         if not account:
-            code = status.HTTP_404_NOT_FOUND
-            body = {"error": f"Account {account_id} not found"}
-            status_str = "FAILED_NOT_FOUND"
+            # Cannot insert a Transaction for a non-existent account (FK constraint).
+            # Return 404 directly without persisting — idempotency for not-found
+            # requests is best-effort; callers should create the account first.
+            return status.HTTP_404_NOT_FOUND, {"error": f"Account '{account_id}' not found"}
+
         elif account.balance >= amount:
             account.balance -= amount
             code = status.HTTP_200_OK
@@ -106,6 +134,7 @@ async def _do_charge(
                 "new_balance": float(account.balance),
             }
             status_str = "SUCCESS"
+
         else:
             code = status.HTTP_400_BAD_REQUEST
             body = {
@@ -116,6 +145,7 @@ async def _do_charge(
             }
             status_str = "FAILED_INSUFFICIENT_FUNDS"
 
+        # ── 4. Persist the transaction (cached response) ──────────────────
         db.add(
             Transaction(
                 idempotency_key=idempotency_key,
@@ -130,40 +160,81 @@ async def _do_charge(
     return code, body
 
 
-# ---------------------------------------------------------------------------
-# Account endpoints
-# ---------------------------------------------------------------------------
-@app.post("/accounts")
-async def create_account(payload: AccountCreateRequest, db: AsyncSession = Depends(get_db)):
-    """Create or reset an account balance."""
-    async with db.begin():
-        result = await db.execute(select(Account).where(Account.id == payload.account_id))
-        account = result.scalar_one_or_none()
-        if account:
-            account.balance = payload.balance
-            msg = "Account updated"
-        else:
-            account = Account(id=payload.account_id, balance=payload.balance)
-            db.add(account)
-            msg = "Account created"
-    return {"message": msg, "account_id": account.id, "balance": float(account.balance)}
+# ── Account endpoints ─────────────────────────────────────────────────────────
+@app.get("/healthz", tags=["ops"])
+async def health():
+    """Liveness check — also pinged by the test harness."""
+    return {"status": "ok"}
 
 
-@app.get("/accounts/{account_id}")
+@app.post("/accounts", tags=["accounts"])
+async def create_account(
+    payload: AccountCreateRequest, db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new account or reset an existing account's balance.
+
+    Concurrent calls for the same account_id are safe: if two requests race on
+    creation, the UNIQUE PK constraint raises IntegrityError which is caught and
+    treated as "account already exists — update it instead".
+    """
+    try:
+        async with db.begin():
+            result = await db.execute(
+                select(Account).where(Account.id == payload.account_id).with_for_update()
+            )
+            account = result.scalar_one_or_none()
+            if account:
+                account.balance = payload.balance
+                msg = "Account updated"
+            else:
+                account = Account(id=payload.account_id, balance=payload.balance)
+                db.add(account)
+                msg = "Account created"
+
+    except IntegrityError:
+        # Concurrent creation race — update the winner's row
+        async with db.begin():
+            result = await db.execute(
+                select(Account).where(Account.id == payload.account_id).with_for_update()
+            )
+            account = result.scalar_one_or_none()
+            if account:
+                account.balance = payload.balance
+                msg = "Account updated"
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Concurrent account creation conflict.",
+                )
+
+    return {
+        "message": msg,
+        "account_id": account.id,
+        "balance": float(account.balance),
+    }
+
+
+@app.get("/accounts/{account_id}", tags=["accounts"])
 async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Retrieve a single account's current balance."""
     account = await db.get(Account, account_id)
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
+        )
     return {"account_id": account.id, "balance": float(account.balance)}
 
 
-# ---------------------------------------------------------------------------
-# Charge endpoint
-# ---------------------------------------------------------------------------
-@app.post("/charge")
+# ── Charge endpoint ───────────────────────────────────────────────────────────
+@app.post("/charge", tags=["charge"])
 async def charge(payload: ChargeRequest, db: AsyncSession = Depends(get_db)):
     """
-    Deduct balance idempotently using SELECT FOR UPDATE + UNIQUE constraint.
+    Idempotent charge.
+
+    SELECT … FOR UPDATE serialises concurrent distinct charges.
+    A UNIQUE constraint on idempotency_key prevents double-charging even when
+    two requests pass the initial existence check before either commits.
     """
     try:
         code, body = await _do_charge(
@@ -172,10 +243,14 @@ async def charge(payload: ChargeRequest, db: AsyncSession = Depends(get_db)):
         return JSONResponse(status_code=code, content=body)
 
     except IntegrityError as exc:
-        # Concurrent request won the race and inserted the key first.
-        logger.warning("IntegrityError (race) for key %s: %s", payload.idempotency_key, exc)
+        # A concurrent request inserted this key first; replay its result.
+        logger.warning(
+            "IntegrityError (race) for key %s: %s", payload.idempotency_key, exc
+        )
         existing = await db.execute(
-            select(Transaction).where(Transaction.idempotency_key == payload.idempotency_key)
+            select(Transaction).where(
+                Transaction.idempotency_key == payload.idempotency_key
+            )
         )
         tx = existing.scalar_one_or_none()
         if tx is not None:
@@ -186,20 +261,43 @@ async def charge(payload: ChargeRequest, db: AsyncSession = Depends(get_db)):
         )
 
 
-# ---------------------------------------------------------------------------
-# UI helper API
-# ---------------------------------------------------------------------------
-@app.get("/api/accounts")
+# ── UI / dashboard API ────────────────────────────────────────────────────────
+@app.get("/api/accounts", tags=["ui"])
 async def list_accounts(db: AsyncSession = Depends(get_db)):
+    """List all accounts ordered alphabetically."""
     result = await db.execute(select(Account).order_by(Account.id))
-    return [{"account_id": a.id, "balance": float(a.balance)} for a in result.scalars().all()]
+    return [
+        {
+            "account_id": a.id,
+            "balance": float(a.balance),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in result.scalars().all()
+    ]
 
 
-@app.get("/api/transactions")
-async def list_transactions(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Transaction).order_by(Transaction.id.desc()).limit(50)
-    )
+@app.get("/api/transactions", tags=["ui"])
+async def list_transactions(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    account_id: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
+):
+    """
+    Retrieve recent transactions, newest first.
+
+    Supports pagination (limit / offset) and optional filtering by
+    account_id and/or status (SUCCESS | FAILED_INSUFFICIENT_FUNDS | FAILED_NOT_FOUND).
+    """
+    q = select(Transaction).order_by(Transaction.id.desc())
+    if account_id:
+        q = q.where(Transaction.account_id == account_id)
+    if status_filter:
+        q = q.where(Transaction.status == status_filter)
+    q = q.limit(limit).offset(offset)
+
+    result = await db.execute(q)
     return [
         {
             "id": tx.id,
@@ -209,22 +307,78 @@ async def list_transactions(db: AsyncSession = Depends(get_db)):
             "status": tx.status,
             "response_code": tx.response_code,
             "response_body": tx.response_body,
+            "created_at": tx.created_at.isoformat() if tx.created_at else None,
         }
         for tx in result.scalars().all()
     ]
 
 
-# ---------------------------------------------------------------------------
-# Concurrency tests – run in-process (no HTTP self-calls)
-# ---------------------------------------------------------------------------
+@app.get("/api/stats", tags=["ui"])
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Aggregate statistics for the dashboard header cards.
+    Returns counts and totals without loading all rows.
+    """
+    from sqlalchemy import func as sqlfunc, case
+
+    # Account stats
+    acc_result = await db.execute(
+        select(
+            sqlfunc.count(Account.id).label("total_accounts"),
+            sqlfunc.coalesce(sqlfunc.sum(Account.balance), 0).label("total_balance"),
+        )
+    )
+    acc_row = acc_result.one()
+
+    # Transaction stats
+    tx_result = await db.execute(
+        select(
+            sqlfunc.count(Transaction.id).label("total_tx"),
+            sqlfunc.count(
+                case((Transaction.status == "SUCCESS", Transaction.id))
+            ).label("success_tx"),
+            sqlfunc.count(
+                case((Transaction.status == "FAILED_INSUFFICIENT_FUNDS", Transaction.id))
+            ).label("failed_tx"),
+            sqlfunc.coalesce(
+                sqlfunc.sum(
+                    case((Transaction.status == "SUCCESS", Transaction.amount))
+                ),
+                0,
+            ).label("total_charged"),
+        )
+    )
+    tx_row = tx_result.one()
+
+    # Duplicate requests = total - distinct keys (duplicates hit idempotency cache)
+    # A duplicate is when the same key is requested again — we detect them as
+    # transactions where the first SELECT finds an existing row.  We can approximate
+    # this as: duplicates = rows with status matching an already-recorded key.
+    # For simplicity we report duplicate transactions as total charges where
+    # the balance was NOT deducted twice (i.e., success_tx only counts once per key).
+
+    return {
+        "total_accounts": acc_row.total_accounts,
+        "total_balance": float(acc_row.total_balance),
+        "total_transactions": tx_row.total_tx,
+        "successful_charges": tx_row.success_tx,
+        "failed_charges": tx_row.failed_tx,
+        "total_charged": float(tx_row.total_charged),
+    }
+
+
+# ── In-process concurrency tests ──────────────────────────────────────────────
 async def _run_charges_concurrently(
     account_id: str,
     amount: Decimal,
     keys: list[uuid.UUID],
 ) -> tuple[int, int]:
     """
-    Fire len(keys) charge tasks concurrently, each with its own DB session.
+    Fire len(keys) charge operations concurrently, each in its own DB session.
+
     Returns (success_count, fail_count).
+    success_count counts results where _do_charge returned HTTP 200 or where
+    the IntegrityError fallback found a committed SUCCESS transaction.
     """
     async def one_charge(key: uuid.UUID) -> bool:
         async with AsyncSessionLocal() as db:
@@ -232,13 +386,15 @@ async def _run_charges_concurrently(
                 code, _ = await _do_charge(key, account_id, amount, db)
                 return code == status.HTTP_200_OK
             except IntegrityError:
-                # Duplicate key race – look up the winner's result
-                existing = await db.execute(
-                    select(Transaction).where(Transaction.idempotency_key == key)
-                )
-                tx = existing.scalar_one_or_none()
+                # Lost the race — look up the winner's result
+                async with db.begin():
+                    existing = await db.execute(
+                        select(Transaction).where(Transaction.idempotency_key == key)
+                    )
+                    tx = existing.scalar_one_or_none()
                 return tx is not None and tx.response_code == status.HTTP_200_OK
-            except Exception:
+            except Exception as exc:
+                logger.warning("Unexpected error in concurrent charge for key %s: %s", key, exc)
                 return False
 
     results = await asyncio.gather(*[one_charge(k) for k in keys], return_exceptions=False)
@@ -246,9 +402,15 @@ async def _run_charges_concurrently(
     return success, len(results) - success
 
 
-@app.post("/api/run-test-1")
+@app.post("/api/run-test-1", tags=["tests"])
 async def run_test_1():
-    """100 concurrent requests with the SAME idempotency key – balance deducted once."""
+    """
+    Concurrency Test 1 — 100 simultaneous duplicate requests.
+
+    Seeds a fresh account with $100, fires 100 concurrent charges of $10 all
+    sharing the same idempotency key, then asserts the balance was deducted
+    exactly once (final balance = $90) and all 100 requests returned HTTP 200.
+    """
     account_id = f"ui_dup_{uuid.uuid4().hex[:8]}"
     initial_balance = Decimal("100.00")
     charge_amount = Decimal("10.00")
@@ -263,25 +425,46 @@ async def run_test_1():
     )
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Account).where(Account.id == account_id))
+        result = await db.execute(
+            select(Account).where(Account.id == account_id)
+        )
         acc = result.scalar_one_or_none()
+        tx_count_result = await db.execute(
+            select(Transaction).where(Transaction.account_id == account_id)
+        )
+        tx_count = len(tx_count_result.scalars().all())
+
     final_balance = float(acc.balance) if acc else 0.0
+    passed = final_balance == 90.0 and success_count == 100 and tx_count == 1
 
     return {
+        "test": "100 duplicate requests",
         "account_id": account_id,
         "initial_balance": 100.0,
         "charge_amount": 10.0,
         "final_balance": final_balance,
         "success_count": success_count,
         "fail_count": fail_count,
+        "transaction_records": tx_count,
         "expected_final_balance": 90.0,
-        "passed": (final_balance == 90.0 and success_count == 100),
+        "passed": passed,
+        "checks": {
+            "balance_deducted_once": final_balance == 90.0,
+            "all_returned_success": success_count == 100,
+            "single_db_record": tx_count == 1,
+        },
     }
 
 
-@app.post("/api/run-test-2")
+@app.post("/api/run-test-2", tags=["tests"])
 async def run_test_2():
-    """50 concurrent requests with DIFFERENT keys – all charges applied."""
+    """
+    Concurrency Test 2 — 50 simultaneous distinct requests.
+
+    Seeds a fresh account with $1,000, fires 50 concurrent $15.50 charges each
+    with a unique idempotency key, then asserts all 50 succeeded and the final
+    balance is exactly $225.00 (no lost updates).
+    """
     account_id = f"ui_diff_{uuid.uuid4().hex[:8]}"
     initial_balance = Decimal("1000.00")
     charge_amount = Decimal("15.50")
@@ -296,42 +479,53 @@ async def run_test_2():
     )
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Account).where(Account.id == account_id))
+        result = await db.execute(
+            select(Account).where(Account.id == account_id)
+        )
         acc = result.scalar_one_or_none()
+        tx_count_result = await db.execute(
+            select(Transaction).where(Transaction.account_id == account_id)
+        )
+        tx_count = len(tx_count_result.scalars().all())
+
     final_balance = float(acc.balance) if acc else 0.0
-    expected_balance = float(initial_balance - charge_amount * 50)
+    expected_balance = float(initial_balance - charge_amount * 50)  # 225.00
+    passed = (
+        abs(final_balance - expected_balance) < 0.01
+        and success_count == 50
+        and tx_count == 50
+    )
 
     return {
+        "test": "50 distinct concurrent requests",
         "account_id": account_id,
         "initial_balance": 1000.0,
         "charge_amount": 15.50,
         "final_balance": final_balance,
         "success_count": success_count,
         "fail_count": fail_count,
+        "transaction_records": tx_count,
         "expected_final_balance": expected_balance,
-        "passed": (abs(final_balance - expected_balance) < 0.01 and success_count == 50),
+        "passed": passed,
+        "checks": {
+            "balance_correct": abs(final_balance - expected_balance) < 0.01,
+            "all_50_succeeded": success_count == 50,
+            "all_50_records": tx_count == 50,
+        },
     }
 
 
-# ---------------------------------------------------------------------------
-# Static dashboard
-# ---------------------------------------------------------------------------
-# Vercel serves the /public directory as static assets at the root,
-# so "/" → public/index.html is handled by Vercel directly in production.
-# When running locally with uvicorn we mount public/ ourselves.
-_PUBLIC_DIR = os.path.join(os.path.dirname(__file__), "public")
-_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")  # legacy path
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+_PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
-@app.get("/", response_class=HTMLResponse)
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get_index():
-    """Serve the dashboard – checks public/ then static/ for index.html."""
-    for candidate in [
-        os.path.join(_PUBLIC_DIR, "index.html"),
-        os.path.join(_STATIC_DIR, "index.html"),
-    ]:
-        if os.path.isfile(candidate):
-            with open(candidate, "r", encoding="utf-8") as f:
-                return HTMLResponse(content=f.read())
+    """Serve the single-page dashboard."""
+    candidate = os.path.join(_PUBLIC_DIR, "index.html")
+    if os.path.isfile(candidate):
+        with open(candidate, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
     return HTMLResponse(
         content="<h1>Dashboard not found</h1><p>Ensure public/index.html exists.</p>",
         status_code=404,

@@ -896,9 +896,19 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 /* ══════════════════════════════════════════════════════
    Boot
 ══════════════════════════════════════════════════════ */
+async function seedIfEmpty() {
+  try {
+    const s = await (await fetch(`${API}/api/stats`)).json();
+    if (s.total_accounts < 2) {
+      await fetch(`${API}/api/seed-demo`, { method: 'POST' });
+      refreshAll();
+    }
+  } catch {}
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   genUUID('ch-key');
-  refreshAll();
+  seedIfEmpty().then(() => refreshAll());
   setInterval(()=>{ if($('page-overview').classList.contains('active')) refreshAll(); },5000);
 });
 </script>

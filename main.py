@@ -321,7 +321,90 @@ async def list_transactions(
     ]
 
 
-@app.get("/api/stats", tags=["ui"])
+@app.post("/api/seed-demo", tags=["ui"])
+async def seed_demo(db: AsyncSession = Depends(get_db)):
+    """
+    Insert realistic demo data if fewer than 5 accounts exist.
+    Safe to call multiple times — skips accounts that already exist.
+    """
+    from sqlalchemy import func as sqlfunc
+
+    # Check if already seeded
+    count_result = await db.execute(select(sqlfunc.count(Account.id)))
+    existing = count_result.scalar()
+    if existing >= 5:
+        return {"seeded": False, "reason": "Demo data already present", "accounts": existing}
+
+    import uuid as _uuid
+    from datetime import datetime, timezone, timedelta
+
+    demo_accounts = [
+        ("alice_payment",   Decimal("4250.00")),
+        ("bob_wallet",      Decimal("1875.50")),
+        ("carol_checkout",  Decimal("920.00")),
+        ("dave_subscr",     Decimal("3100.75")),
+        ("eve_commerce",    Decimal("550.25")),
+        ("frank_api",       Decimal("8900.00")),
+        ("grace_billing",   Decimal("2340.00")),
+        ("henry_test",      Decimal("100.00")),
+    ]
+
+    # Seed accounts (skip if already exists)
+    created_accounts = []
+    for acc_id, balance in demo_accounts:
+        existing_acc = await db.get(Account, acc_id)
+        if not existing_acc:
+            db.add(Account(id=acc_id, balance=balance))
+            created_accounts.append(acc_id)
+    await db.commit()
+
+    # Seed transactions — realistic variety
+    demo_transactions = [
+        # account_id,           amount,   status,                      code, body_extra
+        ("alice_payment",   Decimal("75.00"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("alice_payment",   Decimal("150.00"), "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("bob_wallet",      Decimal("49.99"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("bob_wallet",      Decimal("9999.00"),"FAILED_INSUFFICIENT_FUNDS",  400, {"error": "Insufficient funds"}),
+        ("carol_checkout",  Decimal("80.00"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("dave_subscr",     Decimal("29.99"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("dave_subscr",     Decimal("29.99"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("eve_commerce",    Decimal("450.00"), "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("frank_api",       Decimal("1200.00"),"SUCCESS",                    200, {"message": "Charge successful"}),
+        ("grace_billing",   Decimal("60.00"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+        ("grace_billing",   Decimal("5000.00"),"FAILED_INSUFFICIENT_FUNDS",  400, {"error": "Insufficient funds"}),
+        ("henry_test",      Decimal("10.00"),  "SUCCESS",                    200, {"message": "Charge successful"}),
+    ]
+
+    tx_count = 0
+    for acc_id, amount, tx_status, resp_code, extra in demo_transactions:
+        body = {**extra, "account_id": acc_id, "amount": float(amount)}
+        if tx_status == "SUCCESS":
+            body["new_balance"] = float(
+                next((b for a, b in demo_accounts if a == acc_id), Decimal("0"))
+            )
+        else:
+            body["balance"] = float(
+                next((b for a, b in demo_accounts if a == acc_id), Decimal("0"))
+            )
+            body["amount"] = float(amount)
+        db.add(Transaction(
+            idempotency_key=_uuid.uuid4(),
+            account_id=acc_id,
+            amount=amount,
+            status=tx_status,
+            response_code=resp_code,
+            response_body=body,
+        ))
+        tx_count += 1
+
+    await db.commit()
+    return {
+        "seeded": True,
+        "accounts_created": len(created_accounts),
+        "transactions_created": tx_count,
+    }
+
+
 async def get_stats(db: AsyncSession = Depends(get_db)):
     """
     Aggregate statistics for the dashboard header cards.

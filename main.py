@@ -321,7 +321,7 @@ async def list_transactions(
     ]
 
 
-@app.post("/api/seed-demo", tags=["ui"])
+@app.post("/data/seed-demo", tags=["ui"])
 async def seed_demo(db: AsyncSession = Depends(get_db)):
     """
     Insert realistic demo data if fewer than 5 accounts exist.
@@ -405,6 +405,7 @@ async def seed_demo(db: AsyncSession = Depends(get_db)):
     }
 
 
+@app.get("/data/stats", tags=["ui"])
 async def get_stats(db: AsyncSession = Depends(get_db)):
     """
     Aggregate statistics for the dashboard header cards.
@@ -493,7 +494,7 @@ async def _run_charges_concurrently(
     return success, len(results) - success
 
 
-@app.post("/api/run-test-1", tags=["tests"])
+@app.post("/data/run-test-1", tags=["tests"])
 async def run_test_1():
     """
     Concurrency Test 1 — 100 simultaneous duplicate requests.
@@ -547,7 +548,7 @@ async def run_test_1():
     }
 
 
-@app.post("/api/run-test-2", tags=["tests"])
+@app.post("/data/run-test-2", tags=["tests"])
 async def run_test_2():
     """
     Concurrency Test 2 — 50 simultaneous distinct requests.

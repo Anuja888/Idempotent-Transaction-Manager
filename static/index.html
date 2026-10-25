@@ -623,18 +623,27 @@ async function checkHealth() {
 checkHealth(); setInterval(checkHealth,10000);
 
 /* ══════════════════════════════════════════════════════
-   Stats
+   Stats — computed from accounts + transactions
 ══════════════════════════════════════════════════════ */
 async function loadStats() {
   try {
-    const d = await (await fetch(`${API}/api/stats`)).json();
-    $('sc-acc').textContent     = d.total_accounts;
-    $('sc-bal').textContent     = usd(d.total_balance);
-    $('sc-tx').textContent      = d.total_transactions;
-    $('sc-ok').textContent      = d.successful_charges;
-    $('sc-fail').textContent    = d.failed_charges;
-    $('sc-charged').textContent = usd(d.total_charged);
-  } catch {}
+    const [accs, txs] = await Promise.all([
+      fetch(`${API}/api/accounts`).then(r=>r.json()),
+      fetch(`${API}/api/transactions?limit=200`).then(r=>r.json()),
+    ]);
+    const totalAccounts   = accs.length;
+    const totalBalance    = accs.reduce((s,a)=>s+a.balance, 0);
+    const totalTx         = txs.length;
+    const successTx       = txs.filter(t=>t.status==='SUCCESS').length;
+    const failedTx        = txs.filter(t=>t.status!=='SUCCESS').length;
+    const totalCharged    = txs.filter(t=>t.status==='SUCCESS').reduce((s,t)=>s+t.amount,0);
+    $('sc-acc').textContent     = totalAccounts;
+    $('sc-bal').textContent     = usd(totalBalance);
+    $('sc-tx').textContent      = totalTx;
+    $('sc-ok').textContent      = successTx;
+    $('sc-fail').textContent    = failedTx;
+    $('sc-charged').textContent = usd(totalCharged);
+  } catch(e) { console.warn('stats load failed', e); }
 }
 
 /* ══════════════════════════════════════════════════════
@@ -802,7 +811,7 @@ async function runTest(n) {
   const ticker=setInterval(()=>{ pct=Math.min(pct+(100-pct)*.1,88); fill.style.width=pct+'%'; },350);
 
   try {
-    const r = await fetch(`${API}/api/run-test-${n}`,{method:'POST'});
+    const r = await fetch(`${API}/data/run-test-${n}`,{method:'POST'});
     const d = await r.json();
     clearInterval(ticker); fill.style.width='100%';
     const passed=d.passed;
@@ -898,9 +907,9 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 ══════════════════════════════════════════════════════ */
 async function seedIfEmpty() {
   try {
-    const s = await (await fetch(`${API}/api/stats`)).json();
-    if (s.total_accounts < 2) {
-      await fetch(`${API}/api/seed-demo`, { method: 'POST' });
+    const accs = await (await fetch(`${API}/api/accounts`)).json();
+    if (accs.length < 2) {
+      await fetch(`${API}/data/seed-demo`, { method: 'POST' });
       refreshAll();
     }
   } catch {}

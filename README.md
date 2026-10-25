@@ -223,12 +223,57 @@ psql $DATABASE_URL -f schema.sql
 
 ## Vercel deployment
 
-1. Connect `https://github.com/Anuja888/Idempotent-Transaction-Manager` in Vercel → New Project
-2. Add environment variable: `DATABASE_URL` → your hosted Postgres connection string
-3. Run `schema.sql` against the hosted database once
-4. Deploy — Vercel detects `api/index.py` as the ASGI entry point
+### Prerequisites
+A hosted PostgreSQL database. Free options:
+- **[Neon](https://neon.tech)** — serverless Postgres, free tier, easiest setup
+- **[Supabase](https://supabase.com)** — free tier, standard Postgres
+- **[Railway](https://railway.app)** — free trial, straightforward
 
-Supported hosted Postgres providers: **Neon**, **Supabase**, **Railway**, **Render**.
+### Steps
+
+1. **Import the repo** on [vercel.com/new](https://vercel.com/new) → GitHub → `Anuja888/Idempotent-Transaction-Manager`
+   - Framework Preset: **Other** (auto-detected as Python)
+   - Root Directory: leave as `/`
+
+2. **Set environment variable** in Vercel → Settings → Environment Variables:
+   ```
+   DATABASE_URL = postgresql+asyncpg://user:pass@host/dbname
+   ```
+   > For Neon: use the pooled connection string, replace `postgresql://` with `postgresql+asyncpg://`  
+   > The app automatically enables SSL + `statement_cache_size=0` for hosted providers.
+
+3. **Run the schema once** against your hosted DB (Neon/Supabase both have a SQL editor):
+   ```sql
+   -- paste contents of schema.sql
+   ```
+
+4. **Deploy** — Vercel will:
+   - Detect `fastapi` in `requirements.txt` → Python 3.12 runtime
+   - Install only `requirements.txt` (test deps are in `requirements-dev.txt`, excluded)
+   - Route all traffic via `vercel.json` rewrite → `api/index.py` → FastAPI `app`
+
+### How the Vercel config works
+
+```
+vercel.json
+  functions.api/index.py → Python 3.12 serverless function
+  rewrites /(.*) → /api/index  (every request hits FastAPI)
+
+api/index.py
+  sys.path.insert(project_root)
+  from main import app   ← Vercel detects this ASGI app
+
+database.py
+  VERCEL=1 (set in vercel.json env) →
+    NullPool          (no persistent connections between invocations)
+    ssl="require"     (required by all hosted Postgres providers)
+    statement_cache_size=0  (Neon/Supabase Supavisor compatible)
+```
+
+### Notes
+- Dashboard (`/`) is served by FastAPI reading `public/index.html` — the catch-all rewrite means no static files bypass the function
+- `asyncpg` compiles against the Vercel build environment automatically  
+- Cold starts on free tier: ~1–2 s; subsequent requests are fast
 
 ---
 

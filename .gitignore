@@ -1,0 +1,26 @@
+# Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment / secrets
+.env
+.env.*
+
+# Local test output
+test_results.txt
+
+# Machine-specific docker-compose override (local port mappings)
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/

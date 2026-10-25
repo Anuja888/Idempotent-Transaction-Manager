@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Idempotent Transaction Processor Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(17, 24, 39, 0.7);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-green-glow: rgba(16, 185, 129, 0.1);
+            --accent-red-glow: rgba(239, 68, 68, 0.1);
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-sans: 'Outfit', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(6, 182, 212, 0.08) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.8) 0px, transparent 100%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header Style */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .logo-section h1 {
+            font-family: var(--font-display);
+            font-size: 2.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #22d3ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.03em;
+        }
+
+        .logo-section p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-top: 0.25rem;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            color: var(--accent-green);
+            font-weight: 500;
+            font-size: 0.875rem;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.08);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px var(--accent-green); }
+            100% { transform: scale(0.9); opacity: 0.6; }
+        }
+
+        /* Layout Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Frosted Glass Cards */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(99, 102, 241, 0.25);
+        }
+
+        .card-title {
+            font-family: var(--font-display);
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.75rem;
+        }
+
+        /* Form Fields & Buttons */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .btn-group-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: var(--font-sans);
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            border: 1px solid var(--card-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-accent {
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, #0891b2 100%);
+            color: white;
+            box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4);
+        }
+
+        .btn-accent:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.6);
+        }
+
+        /* Account Table & Lists */
+        .list-container {
+            max-height: 220px;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.3);
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .account-id-tag {
+            font-family: monospace;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+        }
+
+        .balance-tag {
+            font-weight: 700;
+            color: var(--accent-green);
+        }
+
+        /* Test Suite Styles */
+        .test-suites {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .test-suites {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .test-box {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .test-box h3 {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .test-box p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 1.25rem;
+            min-height: 48px;
+        }
+
+        /* Test Result Metrics Display */
+        .test-metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .test-metric-row span:last-child {
+            font-weight: 600;
+        }
+
+        .metric-pass { color: var(--accent-green); }
+        .metric-fail { color: var(--accent-red); }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 9999px;
+            overflow: hidden;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--primary), var(--accent-cyan));
+            transition: width 0.3s ease;
+        }
+
+        /* Monitor / Table Styles */
+        .monitor-card {
+            margin-top: 2rem;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+            max-height: 350px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background: rgba(15, 23, 42, 0.7);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-family: var(--font-display);
+        }
+
+        td {
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-family: var(--font-sans);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: var(--accent-green-glow);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-danger {
+            background: var(--accent-red-glow);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .response-code-badge {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* Logs console */
+        .logs-console {
+            background: #020617;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 1rem;
+            max-height: 250px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            margin-top: 1.5rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+            border-left: 2px solid #38bdf8;
+            padding-left: 0.5rem;
+        }
+
+        .log-entry.success {
+            color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+
+        .log-entry.error {
+            color: var(--accent-red);
+            border-color: var(--accent-red);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Dashboard Header -->
+        <header>
+            <div class="logo-section">
+                <h1>Idempotent Transaction Control Center</h1>
+                <p>FastAPI + PostgreSQL Row Locking & Unique Constraints Sandbox</p>
+            </div>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>System Active</span>
+            </div>
+        </header>
+
+        <!-- Sandbox Panel Grid -->
+        <div class="dashboard-grid">
+            <!-- Left Grid: Account Management & Seeding -->
+            <div class="card">
+                <div class="card-title">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+                    Account Control & Seeding
+                </div>
+                <form id="seed-account-form" onsubmit="event.preventDefault(); handleSeedAccount();">
+                    <div class="form-group">
+                        <label for="account_id">Account ID</label>
+                        <input type="text" id="account_id" placeholder="e.g. user_alice_123" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="initial_balance">Initial Balance ($)</label>
+                        <input type="number" step="0.01" id="initial_balance" value="500.00" required min="0">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Seed / Update Account</button>
+                </form>
+
+                <div style="margin-top: 1.5rem;">
+                    <label style="margin-bottom: 0.5rem;">Active Accounts</label>
+                    <div class="list-container" id="accounts-list">
+                        <div class="list-item" style="justify-content: center; color: var(--text-muted);">
+                            No accounts seeded yet.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Grid: Single Charge Sandbox -->
+            <div class="card">
+                <div class="card-title">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                    Single Charge Transaction
+                </div>
+                <form id="charge-form" onsubmit="event.preventDefault(); handleSingleCharge();">
+                    <div class="form-group">
+                        <label for="charge_account_id">Target Account ID</label>
+                        <input type="text" id="charge_account_id" placeholder="Select or enter account ID" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="idempotency_key">Idempotency Key (UUID)</label>
+                        <div class="btn-group-row">
+                            <input type="text" id="idempotency_key" placeholder="Generate or enter UUID" required>
+                            <button type="button" class="btn-secondary" onclick="generateUUID()">Generate</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="charge_amount">Amount ($)</label>
+                        <input type="number" step="0.01" id="charge_amount" value="50.00" required min="0.01">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%;">Process Charge</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Concurrency Test Suites Section -->
+        <div class="card">
+            <div class="card-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                Concurrency Performance Tests
+            </div>
+            <div class="test-suites">
+                <!-- Test 1 Box -->
+                <div class="test-box">
+                    <div>
+                        <h3>Test 1: 100 Duplicate Requests</h3>
+                        <p>Fires 100 concurrent requests with the <strong>same</strong> idempotency key. Asserts the balance is deducted exactly once.</p>
+                        
+                        <div id="test-1-metrics" style="display: none; margin-bottom: 1rem;">
+                            <div class="test-metric-row"><span>Target Account:</span><span id="t1-account" class="account-id-tag">-</span></div>
+                            <div class="test-metric-row"><span>Initial Balance:</span><span id="t1-init">-</span></div>
+                            <div class="test-metric-row"><span>Charges Succeeded:</span><span id="t1-success" class="metric-pass">-</span></div>
+                            <div class="test-metric-row"><span>Charges Blocked:</span><span id="t1-fail" class="metric-fail">-</span></div>
+                            <div class="test-metric-row"><span>Final Balance:</span><span id="t1-final">-</span></div>
+                            <div class="test-metric-row"><span>Status:</span><span id="t1-status">-</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn-accent" id="btn-run-t1" style="width: 100%;" onclick="runTest(1)">Run 100 Duplicates Test</button>
+                        <div class="progress-bar-container" id="p1-container"><div class="progress-bar-fill" id="p1-fill"></div></div>
+                    </div>
+                </div>
+
+                <!-- Test 2 Box -->
+                <div class="test-box">
+                    <div>
+                        <h3>Test 2: 50 Unique Requests</h3>
+                        <p>Fires 50 concurrent requests with <strong>different</strong> keys. Asserts row-level locking works and no updates are lost.</p>
+                        
+                        <div id="test-2-metrics" style="display: none; margin-bottom: 1rem;">
+                            <div class="test-metric-row"><span>Target Account:</span><span id="t2-account" class="account-id-tag">-</span></div>
+                            <div class="test-metric-row"><span>Initial Balance:</span><span id="t2-init">-</span></div>
+                            <div class="test-metric-row"><span>Charges Succeeded:</span><span id="t2-success" class="metric-pass">-</span></div>
+                            <div class="test-metric-row"><span>Charges Failed:</span><span id="t2-fail" class="metric-fail">-</span></div>
+                            <div class="test-metric-row"><span>Final Balance:</span><span id="t2-final">-</span></div>
+                            <div class="test-metric-row"><span>Status:</span><span id="t2-status">-</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn-accent" id="btn-run-t2" style="width: 100%;" onclick="runTest(2)">Run 50 Uniques Test</button>
+                        <div class="progress-bar-container" id="p2-container"><div class="progress-bar-fill" id="p2-fill"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Database Monitor -->
+        <div class="card monitor-card">
+            <div class="card-title">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>
+                Database Transactions Log (Last 50)
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>TX ID</th>
+                            <th>Idempotency Key</th>
+                            <th>Account ID</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Code</th>
+                            <th>Cached Response Body</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-table-body">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading transactions...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Developer Console Logs -->
+        <div class="logs-console" id="console-logs">
+            <div class="log-entry">Control Center Console ready. Seeding accounts and charges will output telemetry logs here.</div>
+        </div>
+    </div>
+
+    <!-- Scripting UI Interactivity -->
+    <script>
+        const API_BASE = "";
+
+        // Helper to output to UI console
+        function logToConsole(message, type = '') {
+            const consoleBox = document.getElementById("console-logs");
+            const entry = document.createElement("div");
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerText = `[${time}] ${message}`;
+            consoleBox.appendChild(entry);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // Generate UUID helper
+        function generateUUID() {
+            const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            document.getElementById("idempotency_key").value = uuid;
+            logToConsole(`Generated new Idempotency Key: ${uuid}`);
+        }
+
+        // Seed or update an account balance
+        async function handleSeedAccount() {
+            const accountId = document.getElementById("account_id").value.trim();
+            const balance = document.getElementById("initial_balance").value;
+
+            logToConsole(`Sending seed request for account: ${accountId} with balance: $${balance}...`);
+            try {
+                const response = await fetch(`${API_BASE}/accounts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_id: accountId, balance: parseFloat(balance) })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    logToConsole(`Seeding success: ${data.message} (${data.account_id}, balance: $${data.balance})`, 'success');
+                    // Pre-fill target account input fields
+                    document.getElementById("charge_account_id").value = data.account_id;
+                    refreshData();
+                } else {
+                    logToConsole(`Seeding failed: ${data.detail || JSON.stringify(data)}`, 'error');
+                }
+            } catch (err) {
+                logToConsole(`Network error seeding account: ${err.message}`, 'error');
+            }
+        }
+
+        // Send a single charge request
+        async function handleSingleCharge() {
+            const accountId = document.getElementById("charge_account_id").value.trim();
+            const key = document.getElementById("idempotency_key").value.trim();
+            const amount = document.getElementById("charge_amount").value;
+
+            logToConsole(`Executing charge: $${amount} to account ${accountId} with key ${key}...`);
+            try {
+                const response = await fetch(`${API_BASE}/charge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        idempotency_key: key,
+                        account_id: accountId,
+                        amount: parseFloat(amount)
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    logToConsole(`Charge completed (HTTP ${response.status}): ${JSON.stringify(data)}`, 'success');
+                } else {
+                    logToConsole(`Charge failed (HTTP ${response.status}): ${JSON.stringify(data)}`, 'error');
+                }
+                refreshData();
+            } catch (err) {
+                logToConsole(`Network error processing charge: ${err.message}`, 'error');
+            }
+        }
+
+        // Run Performance Concurrency Tests
+        async function runTest(testNum) {
+            const btn = document.getElementById(`btn-run-t` + testNum);
+            const progressContainer = document.getElementById(`p` + testNum + `-container`);
+            const progressFill = document.getElementById(`p` + testNum + `-fill`);
+            const metricsDiv = document.getElementById(`test-` + testNum + `-metrics`);
+
+            btn.disabled = true;
+            btn.innerText = "Running Concurrency Test...";
+            progressContainer.style.display = "block";
+            progressFill.style.width = "0%";
+            metricsDiv.style.display = "none";
+
+            logToConsole(`Starting Concurrent Test ${testNum} on the backend...`);
+
+            // Simulate progress animation
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += (100 - progress) * 0.15;
+                progressFill.style.width = `${Math.min(progress, 95)}%`;
+            }, 300);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/run-test-${testNum}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                clearInterval(progressInterval);
+                progressFill.style.width = "100%";
+
+                if (response.ok) {
+                    logToConsole(`Test ${testNum} Finished. Passed: ${data.passed}. Final Account: ${data.account_id}`, data.passed ? 'success' : 'error');
+                    
+                    // Display metrics on page
+                    document.getElementById(`t` + testNum + `-account`).innerText = data.account_id;
+                    document.getElementById(`t` + testNum + `-init`).innerText = `$${data.initial_balance.toFixed(2)}`;
+                    document.getElementById(`t` + testNum + `-success`).innerText = `${data.success_count} Requests`;
+                    document.getElementById(`t` + testNum + `-fail`).innerText = `${data.fail_count} Requests`;
+                    document.getElementById(`t` + testNum + `-final`).innerText = `$${data.final_balance.toFixed(2)} (Expected: $${data.expected_final_balance.toFixed(2)})`;
+                    
+                    const statusTag = document.getElementById(`t` + testNum + `-status`);
+                    statusTag.className = data.passed ? 'metric-pass' : 'metric-fail';
+                    statusTag.innerText = data.passed ? "PASSED (100% Correct)" : "FAILED (Race Conditions Detected)";
+                    
+                    metricsDiv.style.display = "block";
+                } else {
+                    logToConsole(`Test ${testNum} execution failed: ${data.detail || JSON.stringify(data)}`, 'error');
+                }
+                
+                // Keep progress showing for a brief moment, then hide and restore button
+                setTimeout(() => {
+                    progressContainer.style.display = "none";
+                    btn.disabled = false;
+                    btn.innerText = testNum === 1 ? "Run 100 Duplicates Test" : "Run 50 Uniques Test";
+                }, 2000);
+
+                refreshData();
+            } catch (err) {
+                clearInterval(progressInterval);
+                logToConsole(`Network error running Test ${testNum}: ${err.message}`, 'error');
+                progressContainer.style.display = "none";
+                btn.disabled = false;
+                btn.innerText = testNum === 1 ? "Run 100 Duplicates Test" : "Run 50 Uniques Test";
+            }
+        }
+
+        // Fetch accounts and transactions from backend and refresh views
+        async function refreshData() {
+            // Load accounts
+            try {
+                const response = await fetch(`${API_BASE}/api/accounts`);
+                if (response.ok) {
+                    const accounts = await response.json();
+                    const container = document.getElementById("accounts-list");
+                    if (accounts.length === 0) {
+                        container.innerHTML = `<div class="list-item" style="justify-content: center; color: var(--text-muted);">No accounts seeded yet.</div>`;
+                    } else {
+                        container.innerHTML = accounts.map(acc => `
+                            <div class="list-item">
+                                <span class="account-id-tag" onclick="selectAccount('${acc.account_id}')" style="cursor:pointer;" title="Click to select">${acc.account_id}</span>
+                                <span class="balance-tag">$${acc.balance.toFixed(2)}</span>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (err) {
+                console.error("Error loading accounts:", err);
+            }
+
+            // Load transactions
+            try {
+                const response = await fetch(`${API_BASE}/api/transactions`);
+                if (response.ok) {
+                    const transactions = await response.json();
+                    const body = document.getElementById("transactions-table-body");
+                    if (transactions.length === 0) {
+                        body.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No transactions recorded in DB.</td></tr>`;
+                    } else {
+                        body.innerHTML = transactions.map(tx => {
+                            const badgeClass = tx.status === 'SUCCESS' ? 'badge-success' : 'badge-danger';
+                            const codeClass = tx.response_code >= 200 && tx.response_code < 300 ? 'metric-pass' : 'metric-fail';
+                            return `
+                                <tr>
+                                    <td>${tx.id}</td>
+                                    <td style="font-family: monospace; font-size: 0.8rem; color: var(--accent-cyan);">${tx.idempotency_key}</td>
+                                    <td><span class="account-id-tag">${tx.account_id}</span></td>
+                                    <td style="font-weight:600;">$${tx.amount.toFixed(2)}</td>
+                                    <td><span class="badge ${badgeClass}">${tx.status}</span></td>
+                                    <td><span class="response-code-badge ${codeClass}">${tx.response_code}</span></td>
+                                    <td style="font-family: monospace; font-size: 0.75rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title='${JSON.stringify(tx.response_body)}'>
+                                        ${JSON.stringify(tx.response_body)}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+            } catch (err) {
+                console.error("Error loading transactions:", err);
+            }
+        }
+
+        function selectAccount(id) {
+            document.getElementById("charge_account_id").value = id;
+            logToConsole(`Selected account ID: ${id}`);
+        }
+
+        // Initialize values
+        window.addEventListener('DOMContentLoaded', () => {
+            generateUUID();
+            refreshData();
+            // Polling database state every 5 seconds to keep table fresh
+            setInterval(refreshData, 5000);
+        });
+    </script>
+</body>
+</html>
